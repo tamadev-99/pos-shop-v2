@@ -4,15 +4,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatNumber } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
-const products = [
-  { name: "Indomie Goreng", sold: 42, percentage: 100 },
-  { name: "Aqua 600ml", sold: 38, percentage: 90 },
-  { name: "Teh Botol Sosro", sold: 31, percentage: 74 },
-  { name: "Gudang Garam Filter", sold: 27, percentage: 64 },
-  { name: "Chitato Sapi Panggang", sold: 22, percentage: 52 },
-];
+export interface TopProduct {
+  name: string;
+  sold: number;
+  percentage: number;
+}
 
-export function TopProducts() {
+interface TopProductsProps {
+  products: TopProduct[];
+}
+
+export function TopProducts({ products }: TopProductsProps) {
   return (
     <Card>
       <CardHeader>

@@ -4,13 +4,17 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRupiah } from "@/lib/utils";
 
-const orders = [
-  { id: "ORD-001", customer: "Pelanggan Umum", total: 125000, status: "selesai", time: "14:32" },
-  { id: "ORD-002", customer: "Budi Santoso", total: 287000, status: "selesai", time: "14:15" },
-  { id: "ORD-003", customer: "Pelanggan Umum", total: 54000, status: "selesai", time: "13:48" },
-  { id: "ORD-004", customer: "Siti Rahayu", total: 412000, status: "selesai", time: "13:22" },
-  { id: "ORD-005", customer: "Pelanggan Umum", total: 78000, status: "dibatalkan", time: "12:55" },
-];
+export interface RecentOrder {
+  id: string;
+  customer: string;
+  total: number;
+  status: string;
+  time: string;
+}
+
+interface RecentOrdersProps {
+  orders: RecentOrder[];
+}
 
 const statusVariant = {
   selesai: "success" as const,
@@ -18,7 +22,7 @@ const statusVariant = {
   pending: "warning" as const,
 };
 
-export function RecentOrders() {
+export function RecentOrders({ orders }: RecentOrdersProps) {
   return (
     <Card>
       <CardHeader>

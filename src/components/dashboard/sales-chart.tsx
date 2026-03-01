@@ -12,15 +12,14 @@ import {
 } from "recharts";
 import { useState, useEffect } from "react";
 
-const data = [
-  { day: "Sen", penjualan: 3200000 },
-  { day: "Sel", penjualan: 4100000 },
-  { day: "Rab", penjualan: 3800000 },
-  { day: "Kam", penjualan: 5200000 },
-  { day: "Jum", penjualan: 4700000 },
-  { day: "Sab", penjualan: 6100000 },
-  { day: "Min", penjualan: 4850000 },
-];
+export interface SalesDataPoint {
+  day: string;
+  penjualan: number;
+}
+
+interface SalesChartProps {
+  data: SalesDataPoint[];
+}
 
 function formatShort(value: number) {
   if (value >= 1000000) return `${(value / 1000000).toFixed(1)}jt`;
@@ -28,7 +27,7 @@ function formatShort(value: number) {
   return String(value);
 }
 
-export function SalesChart() {
+export function SalesChart({ data }: SalesChartProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

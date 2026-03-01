@@ -106,8 +106,27 @@ interface Supplier {
   categories: string[];
 }
 
+interface Variant {
+  id: string;
+  sku: string;
+  barcode: string;
+  color: string;
+  size: string;
+  stock: number;
+  minStock: number;
+  buyPrice: number;
+  sellPrice: number;
+  status: string;
+  productId: string;
+  productName: string;
+  brand: string | null;
+  categoryName: string;
+}
+
 interface CreatePOItem {
-  product: string;
+  variantId: string;
+  productName: string;
+  variantInfo: string;
   qty: string;
   buyPrice: string;
 }
@@ -115,6 +134,7 @@ interface CreatePOItem {
 interface Props {
   initialPOs: PurchaseOrder[];
   suppliers: Supplier[];
+  products: Variant[];
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +178,9 @@ const timelineIcons: Record<string, React.ReactNode> = {
 };
 
 const emptyCreateItem = (): CreatePOItem => ({
-  product: "",
+  variantId: "",
+  productName: "",
+  variantInfo: "",
   qty: "",
   buyPrice: "",
 });
@@ -167,7 +189,7 @@ const emptyCreateItem = (): CreatePOItem => ({
 // Component
 // ---------------------------------------------------------------------------
 
-export default function PembelianClient({ initialPOs, suppliers }: Props) {
+export default function PembelianClient({ initialPOs, suppliers, products }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -186,6 +208,21 @@ export default function PembelianClient({ initialPOs, suppliers }: Props) {
   const supplierOptions = suppliers.map((s) => ({
     label: s.name,
     value: s.id,
+  }));
+
+  const selectedSupplierObj = createSupplier
+    ? suppliers.find((s) => s.id === createSupplier)
+    : null;
+
+  const availableVariants = selectedSupplierObj
+    ? products.filter((p) =>
+      selectedSupplierObj.categories.includes(p.categoryName)
+    )
+    : [];
+
+  const productOptions = availableVariants.map((v) => ({
+    label: `${v.productName} (${v.color}, ${v.size}) - ${formatRupiah(v.buyPrice)}`,
+    value: v.id,
   }));
 
   // ---------------------------------------------------------------------------
@@ -235,6 +272,26 @@ export default function PembelianClient({ initialPOs, suppliers }: Props) {
     field: keyof CreatePOItem,
     value: string
   ) {
+    if (field === "variantId") {
+      const variant = products.find((p) => p.id === value);
+      if (variant) {
+        setCreateItems((prev) =>
+          prev.map((item, i) =>
+            i === index
+              ? {
+                ...item,
+                variantId: value,
+                productName: variant.productName,
+                variantInfo: `${variant.color}, ${variant.size}`,
+                buyPrice: variant.buyPrice.toString(),
+              }
+              : item
+          )
+        );
+        return;
+      }
+    }
+
     setCreateItems((prev) =>
       prev.map((item, i) =>
         i === index ? { ...item, [field]: value } : item
@@ -258,9 +315,9 @@ export default function PembelianClient({ initialPOs, suppliers }: Props) {
 
     const validItems = createItems.filter(
       (item) =>
-        item.product.trim() !== "" &&
+        item.variantId !== "" &&
         parseInt(item.qty) > 0 &&
-        parseInt(item.buyPrice) > 0
+        parseInt(item.buyPrice) >= 0
     );
 
     if (validItems.length === 0) {
@@ -273,9 +330,9 @@ export default function PembelianClient({ initialPOs, suppliers }: Props) {
         await createPurchaseOrder({
           supplierId: createSupplier,
           items: validItems.map((item) => ({
-            variantId: "",
-            productName: item.product,
-            variantInfo: "",
+            variantId: item.variantId,
+            productName: item.productName,
+            variantInfo: item.variantInfo,
             qty: parseInt(item.qty),
             unitCost: parseInt(item.buyPrice),
           })),
@@ -758,12 +815,20 @@ export default function PembelianClient({ initialPOs, suppliers }: Props) {
                   className="flex items-start gap-2 rounded-xl bg-white/[0.02] border border-white/[0.06] p-2.5"
                 >
                   <div className="flex-1 space-y-2">
-                    <Input
-                      placeholder="Nama produk"
-                      value={item.product}
-                      onChange={(e) =>
-                        updateCreateItem(index, "product", e.target.value)
+                    <Select
+                      options={productOptions}
+                      placeholder={
+                        createSupplier
+                          ? productOptions.length > 0
+                            ? "Pilih produk..."
+                            : "Tidak ada produk"
+                          : "Pilih supplier dulu"
                       }
+                      value={item.variantId}
+                      onChange={(e) =>
+                        updateCreateItem(index, "variantId", e.target.value)
+                      }
+                      disabled={!createSupplier || productOptions.length === 0}
                     />
                     <div className="grid grid-cols-2 gap-2">
                       <Input

@@ -5,53 +5,62 @@ import { formatRupiah, formatNumber } from "@/lib/utils";
 import { TrendingUp, TrendingDown, ShoppingCart, DollarSign, BarChart3, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const stats = [
-  {
-    label: "Penjualan Hari Ini",
-    value: formatRupiah(4850000),
-    change: "+12.5%",
-    trend: "up" as const,
-    icon: DollarSign,
-    gradient: "from-emerald-500/20 to-teal-500/20",
-    iconColor: "text-emerald-400",
-    glowColor: "shadow-[0_0_20px_-6px_rgba(16,185,129,0.25)]",
-  },
-  {
-    label: "Total Pesanan",
-    value: formatNumber(47),
-    change: "+8.2%",
-    trend: "up" as const,
-    icon: ShoppingCart,
-    gradient: "from-cyan-500/20 to-blue-500/20",
-    iconColor: "text-cyan-400",
-    glowColor: "shadow-[0_0_20px_-6px_rgba(6,182,212,0.25)]",
-  },
-  {
-    label: "Rata-rata Transaksi",
-    value: formatRupiah(103191),
-    change: "-2.1%",
-    trend: "down" as const,
-    icon: BarChart3,
-    gradient: "from-violet-500/20 to-purple-500/20",
-    iconColor: "text-violet-400",
-    glowColor: "shadow-[0_0_20px_-6px_rgba(139,92,246,0.25)]",
-  },
-  {
-    label: "Produk Terjual",
-    value: formatNumber(189),
-    change: "+15.3%",
-    trend: "up" as const,
-    icon: Package,
-    gradient: "from-amber-500/20 to-orange-500/20",
-    iconColor: "text-amber-400",
-    glowColor: "shadow-[0_0_20px_-6px_rgba(245,158,11,0.25)]",
-  },
-];
+interface StatsCardsProps {
+  stats: {
+    totalSales: number;
+    totalOrders: number;
+    avgTransaction: number;
+    productsSold: number;
+  };
+}
 
-export function StatsCards() {
+export function StatsCards({ stats }: StatsCardsProps) {
+  const displayStats = [
+    {
+      label: "Penjualan Hari Ini",
+      value: formatRupiah(stats.totalSales),
+      change: "+0%", // can be dynamic later
+      trend: "up" as const,
+      icon: DollarSign,
+      gradient: "from-emerald-500/20 to-teal-500/20",
+      iconColor: "text-emerald-400",
+      glowColor: "shadow-[0_0_20px_-6px_rgba(16,185,129,0.25)]",
+    },
+    {
+      label: "Total Pesanan",
+      value: formatNumber(stats.totalOrders),
+      change: "+0%",
+      trend: "up" as const,
+      icon: ShoppingCart,
+      gradient: "from-cyan-500/20 to-blue-500/20",
+      iconColor: "text-cyan-400",
+      glowColor: "shadow-[0_0_20px_-6px_rgba(6,182,212,0.25)]",
+    },
+    {
+      label: "Rata-rata Transaksi",
+      value: formatRupiah(stats.avgTransaction),
+      change: "0%",
+      trend: "up" as const,
+      icon: BarChart3,
+      gradient: "from-violet-500/20 to-purple-500/20",
+      iconColor: "text-violet-400",
+      glowColor: "shadow-[0_0_20px_-6px_rgba(139,92,246,0.25)]",
+    },
+    {
+      label: "Produk Terjual",
+      value: formatNumber(stats.productsSold),
+      change: "+0%",
+      trend: "up" as const,
+      icon: Package,
+      gradient: "from-amber-500/20 to-orange-500/20",
+      iconColor: "text-amber-400",
+      glowColor: "shadow-[0_0_20px_-6px_rgba(245,158,11,0.25)]",
+    },
+  ];
+
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 stagger">
-      {stats.map((stat) => (
+      {displayStats.map((stat) => (
         <Card key={stat.label} className="p-3 md:p-4 animate-fade-up" hover>
           <div className="flex items-start justify-between">
             <div className="min-w-0">
