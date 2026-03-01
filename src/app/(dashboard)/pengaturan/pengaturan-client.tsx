@@ -6,32 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
-import { Save, Store, User, Receipt, Users, Percent, Trash2, Printer } from "lucide-react";
+import { Save, Store, User, Receipt, Users, Percent, Trash2, Printer, Usb, Wifi, Bluetooth } from "lucide-react";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { updateSetting, updateUserRole } from "@/lib/actions/settings";
 import { toast } from "sonner";
-import { updateSetting } from "@/lib/actions/settings";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface UserRecord {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  createdAt: Date;
-}
-
-export interface PengaturanClientProps {
-  settings: Record<string, unknown>;
-  users: UserRecord[];
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 const settingsTabs = [
   { label: "Toko", value: "toko" },
@@ -42,33 +20,90 @@ const settingsTabs = [
   { label: "Pengguna", value: "pengguna" },
 ];
 
-export default function PengaturanClient({ settings, users }: PengaturanClientProps) {
+interface UserData {
+  id: string;
+  name: string;
+  email: string;
+  role: string | null;
+  createdAt: Date;
+}
+
+interface Props {
+  initialSettings: Record<string, any>;
+  users: UserData[];
+}
+
+export default function PengaturanClient({ initialSettings, users }: Props) {
   const [activeTab, setActiveTab] = useState("toko");
   const [isPending, startTransition] = useTransition();
-  const router = useRouter();
 
-  // Extract settings with defaults
-  const store = (settings.store as Record<string, string>) || {};
-  const tax = (settings.tax as Record<string, string>) || {};
-  const receipt = (settings.receipt as Record<string, string>) || {};
-  const printerSettings = (settings.printer as Record<string, string>) || {};
+  // Local state for settings to update
+  const [storeName, setStoreName] = useState(initialSettings["storeName"] || "Toko Maju Jaya");
+  const [storeAddress, setStoreAddress] = useState(initialSettings["storeAddress"] || "Jl. Raya Utama No. 123, Jakarta");
+  const [storePhone, setStorePhone] = useState(initialSettings["storePhone"] || "021-5551234");
+  const [storeEmail, setStoreEmail] = useState(initialSettings["storeEmail"] || "info@tokomajujaya.id");
 
-  function handleSaveSettings(key: string, formData: FormData) {
-    const data: Record<string, string> = {};
-    formData.forEach((value, fieldKey) => {
-      data[fieldKey] = value as string;
-    });
+  const [taxName, setTaxName] = useState(initialSettings["taxName"] || "PPN");
+  const [taxRate, setTaxRate] = useState(initialSettings["taxRate"] || "11");
+  const [taxIncluded, setTaxIncluded] = useState(initialSettings["taxIncluded"] || "no");
 
+  const [receiptHeader, setReceiptHeader] = useState(initialSettings["receiptHeader"] || "Toko Maju Jaya");
+  const [receiptAddress, setReceiptAddress] = useState(initialSettings["receiptAddress"] || "Jl. Raya Utama No. 123");
+  const [receiptFooter, setReceiptFooter] = useState(initialSettings["receiptFooter"] || "Terima kasih atas kunjungan Anda!");
+  const [receiptWidth, setReceiptWidth] = useState(initialSettings["receiptWidth"] || "58");
+  const [receiptLogo, setReceiptLogo] = useState(initialSettings["receiptLogo"] || "no");
+
+  const [printerType, setPrinterType] = useState(initialSettings["printerType"] || "usb");
+  const [printerTarget, setPrinterTarget] = useState(initialSettings["printerTarget"] || "POS-58 Thermal Printer");
+
+  const handleSaveStore = (e: React.FormEvent) => {
+    e.preventDefault();
     startTransition(async () => {
-      try {
-        await updateSetting(key, data);
-        router.refresh();
-        toast.success("Pengaturan berhasil disimpan");
-      } catch {
-        toast.error("Gagal menyimpan pengaturan");
-      }
+      await updateSetting("storeName", storeName);
+      await updateSetting("storeAddress", storeAddress);
+      await updateSetting("storePhone", storePhone);
+      await updateSetting("storeEmail", storeEmail);
+      toast.success("Informasi toko berhasil disimpan!");
     });
-  }
+  };
+
+  const handleSaveTax = (e: React.FormEvent) => {
+    e.preventDefault();
+    startTransition(async () => {
+      await updateSetting("taxName", taxName);
+      await updateSetting("taxRate", taxRate);
+      await updateSetting("taxIncluded", taxIncluded);
+      toast.success("Pengaturan pajak berhasil disimpan!");
+    });
+  };
+
+  const handleSaveReceipt = (e: React.FormEvent) => {
+    e.preventDefault();
+    startTransition(async () => {
+      await updateSetting("receiptHeader", receiptHeader);
+      await updateSetting("receiptAddress", receiptAddress);
+      await updateSetting("receiptFooter", receiptFooter);
+      await updateSetting("receiptWidth", receiptWidth);
+      await updateSetting("receiptLogo", receiptLogo);
+      toast.success("Template struk berhasil disimpan!");
+    });
+  };
+
+  const handleSavePrinter = (e: React.FormEvent) => {
+    e.preventDefault();
+    startTransition(async () => {
+      await updateSetting("printerType", printerType);
+      await updateSetting("printerTarget", printerTarget);
+      toast.success("Pengaturan printer berhasil disimpan!");
+    });
+  };
+
+  const handleChangeRole = (userId: string, newRole: string) => {
+    startTransition(async () => {
+      await updateUserRole(userId, newRole as "cashier" | "manager" | "owner");
+      toast.success("Role pengguna berhasil diubah!");
+    });
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-[1400px]">
@@ -103,105 +138,34 @@ export default function PengaturanClient({ settings, users }: PengaturanClientPr
               </div>
             </CardHeader>
             <CardContent>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveSettings("store", new FormData(e.currentTarget));
-                }}
-                className="space-y-4 max-w-lg"
-              >
+              <form onSubmit={handleSaveStore} className="space-y-4 max-w-lg">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">
                     Nama Toko
                   </label>
-                  <Input name="name" defaultValue={(store.name as string) || "Toko Maju Jaya"} />
+                  <Input value={storeName} onChange={(e) => setStoreName(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">
                     Alamat
                   </label>
-                  <Input name="address" defaultValue={(store.address as string) || ""} />
+                  <Input value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
                       Telepon
                     </label>
-                    <Input name="phone" defaultValue={(store.phone as string) || ""} />
+                    <Input value={storePhone} onChange={(e) => setStorePhone(e.target.value)} />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
                       Email
                     </label>
-                    <Input name="email" defaultValue={(store.email as string) || ""} />
+                    <Input value={storeEmail} onChange={(e) => setStoreEmail(e.target.value)} />
                   </div>
                 </div>
                 <Button type="submit" disabled={isPending}>
-                  <Save size={14} />
-                  Simpan Perubahan
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Akun */}
-        {activeTab === "akun" && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center shadow-[0_0_12px_-3px_rgba(6,182,212,0.25)]">
-                  <User size={15} className="text-cyan-400" />
-                </div>
-                <div>
-                  <CardTitle>Akun Saya</CardTitle>
-                  <CardDescription>
-                    Ubah informasi akun dan kata sandi
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={(e) => e.preventDefault()} className="space-y-4 max-w-lg">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Nama Lengkap
-                    </label>
-                    <Input defaultValue="Admin Utama" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Email
-                    </label>
-                    <Input defaultValue="admin@kasirpro.id" />
-                  </div>
-                </div>
-                <div className="h-px bg-white/[0.06]" />
-                <p className="text-xs font-medium text-muted-foreground">
-                  Ubah Kata Sandi
-                </p>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Kata Sandi Lama
-                  </label>
-                  <Input type="password" placeholder="Masukkan kata sandi lama" />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Kata Sandi Baru
-                    </label>
-                    <Input type="password" placeholder="Min. 8 karakter" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Konfirmasi
-                    </label>
-                    <Input type="password" placeholder="Ulangi kata sandi" />
-                  </div>
-                </div>
-                <Button type="submit">
                   <Save size={14} />
                   Simpan Perubahan
                 </Button>
@@ -227,38 +191,33 @@ export default function PengaturanClient({ settings, users }: PengaturanClientPr
               </div>
             </CardHeader>
             <CardContent>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveSettings("tax", new FormData(e.currentTarget));
-                }}
-                className="space-y-4 max-w-lg"
-              >
+              <form onSubmit={handleSaveTax} className="space-y-4 max-w-lg">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
                       Nama Pajak
                     </label>
-                    <Input name="taxName" defaultValue={(tax.taxName as string) || "PPN"} />
+                    <Input value={taxName} onChange={(e) => setTaxName(e.target.value)} />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
                       Tarif (%)
                     </label>
-                    <Input name="taxRate" type="number" defaultValue={(tax.taxRate as string) || "11"} />
+                    <Input type="number" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">
-                    Ditampilkan di struk
+                    Metode Pajak
                   </label>
                   <Select
-                    name="showOnReceipt"
                     options={[
-                      { label: "Ya, tampilkan terpisah", value: "yes" },
-                      { label: "Tidak, sudah termasuk harga", value: "no" },
+                      { label: "Tidak Diterapkan", value: "no" },
+                      { label: "Ditambahkan", value: "exclude" },
+                      { label: "Sudah Termasuk (Include)", value: "include" },
                     ]}
-                    defaultValue={(tax.showOnReceipt as string) || "yes"}
+                    value={taxIncluded}
+                    onChange={(e) => setTaxIncluded(e.target.value)}
                   />
                 </div>
                 <Button type="submit" disabled={isPending}>
@@ -287,30 +246,24 @@ export default function PengaturanClient({ settings, users }: PengaturanClientPr
               </div>
             </CardHeader>
             <CardContent>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveSettings("receipt", new FormData(e.currentTarget));
-                }}
-                className="space-y-4 max-w-lg"
-              >
+              <form onSubmit={handleSaveReceipt} className="space-y-4 max-w-lg">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">
                     Header Struk
                   </label>
-                  <Input name="header" defaultValue={(receipt.header as string) || "Toko Maju Jaya"} />
+                  <Input value={receiptHeader} onChange={(e) => setReceiptHeader(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">
                     Alamat di Struk
                   </label>
-                  <Input name="address" defaultValue={(receipt.address as string) || ""} />
+                  <Input value={receiptAddress} onChange={(e) => setReceiptAddress(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">
                     Footer Struk
                   </label>
-                  <Input name="footer" defaultValue={(receipt.footer as string) || "Terima kasih atas kunjungan Anda!"} />
+                  <Input value={receiptFooter} onChange={(e) => setReceiptFooter(e.target.value)} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
@@ -318,12 +271,12 @@ export default function PengaturanClient({ settings, users }: PengaturanClientPr
                       Ukuran Kertas
                     </label>
                     <Select
-                      name="paperSize"
                       options={[
                         { label: "58mm", value: "58" },
                         { label: "80mm", value: "80" },
                       ]}
-                      defaultValue={(receipt.paperSize as string) || "58"}
+                      value={receiptWidth}
+                      onChange={(e) => setReceiptWidth(e.target.value)}
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -331,12 +284,12 @@ export default function PengaturanClient({ settings, users }: PengaturanClientPr
                       Tampilkan Logo
                     </label>
                     <Select
-                      name="showLogo"
                       options={[
                         { label: "Ya", value: "yes" },
                         { label: "Tidak", value: "no" },
                       ]}
-                      defaultValue={(receipt.showLogo as string) || "no"}
+                      value={receiptLogo}
+                      onChange={(e) => setReceiptLogo(e.target.value)}
                     />
                   </div>
                 </div>
@@ -366,133 +319,26 @@ export default function PengaturanClient({ settings, users }: PengaturanClientPr
               </div>
             </CardHeader>
             <CardContent>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveSettings("printer", new FormData(e.currentTarget));
-                }}
-                className="space-y-4 max-w-lg"
-              >
+              <form onSubmit={handleSavePrinter} className="space-y-4 max-w-lg">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">
                     Tipe Koneksi
                   </label>
                   <Select
-                    name="connectionType"
                     options={[
                       { label: "USB", value: "usb" },
                       { label: "Bluetooth", value: "bluetooth" },
                       { label: "Network (IP)", value: "network" },
                     ]}
-                    defaultValue={(printerSettings.connectionType as string) || "usb"}
+                    value={printerType}
+                    onChange={(e) => setPrinterType(e.target.value)}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">
                     Nama Printer / Alamat IP
                   </label>
-                  <Input name="printerName" defaultValue={(printerSettings.printerName as string) || "POS-58 Thermal Printer"} placeholder="Nama printer atau alamat IP" />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Lebar Kertas
-                    </label>
-                    <Select
-                      name="paperWidth"
-                      options={[
-                        { label: "58mm", value: "58" },
-                        { label: "80mm", value: "80" },
-                      ]}
-                      defaultValue={(printerSettings.paperWidth as string) || "58"}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Kepadatan Cetak
-                    </label>
-                    <Select
-                      name="density"
-                      options={[
-                        { label: "Ringan", value: "light" },
-                        { label: "Normal", value: "normal" },
-                        { label: "Tebal", value: "bold" },
-                      ]}
-                      defaultValue={(printerSettings.density as string) || "normal"}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Auto-Cut Kertas
-                    </label>
-                    <Select
-                      name="autoCut"
-                      options={[
-                        { label: "Ya", value: "yes" },
-                        { label: "Tidak", value: "no" },
-                      ]}
-                      defaultValue={(printerSettings.autoCut as string) || "yes"}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Buka Laci Kas Saat Cetak
-                    </label>
-                    <Select
-                      name="openDrawer"
-                      options={[
-                        { label: "Ya", value: "yes" },
-                        { label: "Tidak", value: "no" },
-                      ]}
-                      defaultValue={(printerSettings.openDrawer as string) || "no"}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Character Set / Encoding
-                    </label>
-                    <Select
-                      name="encoding"
-                      options={[
-                        { label: "UTF-8", value: "utf8" },
-                        { label: "ASCII", value: "ascii" },
-                        { label: "ISO-8859-1", value: "iso" },
-                        { label: "Windows-1252", value: "win1252" },
-                      ]}
-                      defaultValue={(printerSettings.encoding as string) || "utf8"}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Jumlah Salinan
-                    </label>
-                    <Select
-                      name="copies"
-                      options={[
-                        { label: "1 lembar", value: "1" },
-                        { label: "2 lembar", value: "2" },
-                        { label: "3 lembar", value: "3" },
-                      ]}
-                      defaultValue={(printerSettings.copies as string) || "1"}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Logo pada Struk
-                  </label>
-                  <Select
-                    name="printLogo"
-                    options={[
-                      { label: "Ya, tampilkan logo", value: "yes" },
-                      { label: "Tidak", value: "no" },
-                    ]}
-                    defaultValue={(printerSettings.printLogo as string) || "no"}
-                  />
+                  <Input value={printerTarget} onChange={(e) => setPrinterTarget(e.target.value)} placeholder="Nama printer atau alamat IP" />
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   <Button type="submit" disabled={isPending}>
@@ -502,7 +348,7 @@ export default function PengaturanClient({ settings, users }: PengaturanClientPr
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => toast.info("Test print berhasil dikirim!")}
+                    onClick={() => toast("Test print berhasil dikirim!")}
                   >
                     <Printer size={14} />
                     Test Print
@@ -527,10 +373,6 @@ export default function PengaturanClient({ settings, users }: PengaturanClientPr
                     <CardDescription>Kelola akses pengguna sistem</CardDescription>
                   </div>
                 </div>
-                <Button size="sm">
-                  <Users size={14} />
-                  Tambah Pengguna
-                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -547,12 +389,6 @@ export default function PengaturanClient({ settings, users }: PengaturanClientPr
                       <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">
                         Role
                       </th>
-                      <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider hidden sm:table-cell">
-                        Bergabung
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">
-                        Aksi
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -568,27 +404,18 @@ export default function PengaturanClient({ settings, users }: PengaturanClientPr
                           {user.email}
                         </td>
                         <td className="py-3">
-                          <Badge variant={user.role === "owner" ? "default" : "outline"}>
-                            {user.role}
-                          </Badge>
-                        </td>
-                        <td className="py-3 text-xs text-muted-foreground font-num hidden sm:table-cell">
-                          {new Date(user.createdAt).toLocaleDateString("id-ID")}
-                        </td>
-                        <td className="py-3">
-                          <Button variant="ghost" size="icon">
-                            <Trash2 size={13} className="text-destructive/60" />
-                          </Button>
+                          <Select
+                            options={[
+                              { label: "Cashier", value: "cashier" },
+                              { label: "Manager", value: "manager" },
+                              { label: "Owner", value: "owner" },
+                            ]}
+                            value={user.role || "cashier"}
+                            onChange={(e) => handleChangeRole(user.id, e.target.value)}
+                          />
                         </td>
                       </tr>
                     ))}
-                    {users.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                          Belum ada pengguna
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </div>
