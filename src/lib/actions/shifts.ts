@@ -59,20 +59,27 @@ export async function closeShift(
   revalidatePath("/shift");
 }
 
-export async function getCurrentShift(cashierId: string) {
-  const activeShift = await db
-    .select()
-    .from(shifts)
-    .where(and(eq(shifts.cashierId, cashierId), eq(shifts.status, "active")))
-    .limit(1);
+export async function getActiveShifts() {
+  return db.query.shifts.findMany({
+    where: eq(shifts.status, "active"),
+    with: { cashier: true },
+    orderBy: [desc(shifts.openedAt)],
+  });
+}
 
-  return activeShift[0] || null;
+export async function getCurrentShift(cashierId: string) {
+  const activeShift = await db.query.shifts.findFirst({
+    where: and(eq(shifts.cashierId, cashierId), eq(shifts.status, "active")),
+    with: { cashier: true },
+  });
+
+  return activeShift || null;
 }
 
 export async function getShiftHistory(limit?: number) {
-  return db
-    .select()
-    .from(shifts)
-    .orderBy(desc(shifts.openedAt))
-    .limit(limit || 50);
+  return db.query.shifts.findMany({
+    orderBy: [desc(shifts.openedAt)],
+    limit: limit || 50,
+    with: { cashier: true },
+  });
 }
