@@ -1,6 +1,9 @@
 import { Sidebar } from "@/components/sidebar";
 import { AuthProvider } from "@/components/providers/auth-provider";
 
+export const dynamic = "force-dynamic";
+
+
 export default function DashboardLayout({
   children,
 }: {
