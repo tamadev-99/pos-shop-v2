@@ -127,35 +127,14 @@ export function ReceiptDialog({
     };
 
     const handleWhatsApp = () => {
-        let text = `*Struk Pembelian*\n*${storeName}*\n`;
-        if (storeAddress) text += `${storeAddress}\n`;
-        text += `--------------------------------\n`;
-        text += `No. Order: ${orderId}\n`;
-        text += `Tanggal: ${now.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" })} ${now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}\n`;
-        text += `Pelanggan: ${customerName}\n`;
-        text += `--------------------------------\n`;
+        const receiptUrl = `${window.location.origin}/receipt/${orderId}`;
 
-        items.forEach(item => {
-            text += `${item.name}\n`;
-            text += `${item.qty} x ${formatRupiah(item.price)} = ${formatRupiah(item.qty * item.price)}\n`;
-        });
-
-        text += `--------------------------------\n`;
-        text += `Subtotal: ${formatRupiah(subtotal)}\n`;
-        if (discountAmount > 0) text += `Diskon: -${formatRupiah(discountAmount)}\n`;
-        if (taxAmount > 0) text += `${taxName}: ${formatRupiah(taxAmount)}\n`;
-        if (shippingFee > 0) text += `Ongkir: ${formatRupiah(shippingFee)}\n`;
-        text += `*TOTAL: ${formatRupiah(total)}*\n`;
-        text += `Pembayaran: ${paymentMethod}\n`;
-
-        if (cashPaid !== undefined && changeAmount !== undefined) {
-            text += `Uang Tunai: ${formatRupiah(cashPaid)}\n`;
-            text += `Kembalian: ${formatRupiah(changeAmount)}\n`;
-        }
-
-        text += `--------------------------------\n`;
-        text += `${receiptFooter || "Terima kasih atas kunjungan Anda!"}\n`;
-        text += `Powered by KasirPro`;
+        let text = `*Terima Kasih!*\n`;
+        text += `Pesanan Anda di *${storeName}* telah kami terima.\n\n`;
+        text += `Silakan klik link di bawah ini untuk melihat atau menyimpan Struk Digital Anda:\n`;
+        text += `${receiptUrl}\n\n`;
+        text += `*${storeName}*\n`;
+        if (storeAddress) text += `${storeAddress}`;
 
         const encodedText = encodeURIComponent(text);
 
