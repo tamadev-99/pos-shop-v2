@@ -63,6 +63,8 @@ interface PaymentDialogProps {
   tax: number;
   shippingFee: number;
   discountAmount?: number;
+  taxMode?: string;
+  taxName?: string;
   onConfirm: (paymentMethod: PaymentMethod, cashPaid?: number, changeAmount?: number) => Promise<void> | void;
 }
 
@@ -74,6 +76,8 @@ export function PaymentDialog({
   tax,
   shippingFee,
   discountAmount = 0,
+  taxMode = "no",
+  taxName = "PPN",
   onConfirm,
 }: PaymentDialogProps) {
   const [method, setMethod] = useState<PaymentMethod>("tunai");
@@ -122,7 +126,7 @@ export function PaymentDialog({
           <div className="flex justify-center gap-3 mt-2 text-[10px] text-muted-dim flex-wrap">
             <span>Subtotal: {formatRupiah(subtotal)}</span>
             {discountAmount > 0 && <span className="text-rose-400">Diskon: -{formatRupiah(discountAmount)}</span>}
-            <span>PPN: {formatRupiah(tax)}</span>
+            {taxMode !== "no" && <span>{taxName} {taxMode === "include" ? "(Inc)" : ""}: {formatRupiah(tax)}</span>}
             {shippingFee > 0 && <span>Ongkir: {formatRupiah(shippingFee)}</span>}
           </div>
         </div>

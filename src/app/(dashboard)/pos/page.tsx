@@ -88,7 +88,7 @@ export default async function POSPage() {
     storeAddress,
     storePhone,
     taxRate: Number(settings.taxRate) || 11,
-    taxEnabled: settings.taxEnabled === "true",
+    taxIncluded: (settings.taxIncluded as string) || "no",
     receiptHeader: (settings.receiptHeader as string) || storeName,
     receiptAddress: (settings.receiptAddress as string) || storeAddress,
     receiptFooter: (settings.receiptFooter as string) || "Terima kasih atas kunjungan Anda!",

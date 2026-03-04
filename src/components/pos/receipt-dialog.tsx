@@ -39,6 +39,7 @@ interface ReceiptDialogProps {
     receiptWidth?: "58" | "80";
     cashPaid?: number;
     changeAmount?: number;
+    taxName?: string;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -74,6 +75,7 @@ export function ReceiptDialog({
     receiptWidth = "58",
     cashPaid,
     changeAmount,
+    taxName = "PPN",
 }: ReceiptDialogProps) {
     const receiptRef = useRef<HTMLDivElement>(null);
     const now = new Date();
@@ -141,7 +143,7 @@ export function ReceiptDialog({
         text += `--------------------------------\n`;
         text += `Subtotal: ${formatRupiah(subtotal)}\n`;
         if (discountAmount > 0) text += `Diskon: -${formatRupiah(discountAmount)}\n`;
-        if (taxAmount > 0) text += `Pajak: ${formatRupiah(taxAmount)}\n`;
+        if (taxAmount > 0) text += `${taxName}: ${formatRupiah(taxAmount)}\n`;
         if (shippingFee > 0) text += `Ongkir: ${formatRupiah(shippingFee)}\n`;
         text += `*TOTAL: ${formatRupiah(total)}*\n`;
         text += `Pembayaran: ${paymentMethod}\n`;

@@ -42,7 +42,12 @@ interface CartPanelProps {
   pointsToRedeem?: number;
   onPointsRedeemChange?: (points: number) => void;
   discountAmount?: number;
+  taxAmount?: number;
   taxRate?: number;
+  taxMode?: string;
+  taxName?: string;
+  calculatedSubtotal?: number;
+  calculatedTotal?: number;
 }
 
 export function CartPanel({
@@ -68,7 +73,12 @@ export function CartPanel({
   pointsToRedeem = 0,
   onPointsRedeemChange,
   discountAmount = 0,
-  taxRate,
+  taxAmount = 0,
+  taxRate = 11,
+  taxMode = "no",
+  taxName = "PPN",
+  calculatedSubtotal = 0,
+  calculatedTotal = 0,
 }: CartPanelProps) {
   const customerOptions = [
     { label: "Pelanggan Umum", value: "" },
@@ -82,11 +92,6 @@ export function CartPanel({
       value: p.id,
     })),
   ];
-
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const taxRateVal = taxRate ?? 11;
-  const tax = Math.round((subtotal - Math.max(0, discountAmount - (pointsToRedeem || 0))) * (taxRateVal / 100));
-  const total = Math.max(0, subtotal - discountAmount + tax + shippingFee);
 
   return (
     <div className="flex flex-col h-full border-l border-border bg-surface backdrop-blur-xl">
@@ -205,8 +210,8 @@ export function CartPanel({
         <div className="border-t border-border p-4 space-y-3 shrink-0 bg-white/[0.01]">
           <div className="space-y-2">
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Subtotal</span>
-              <span className="font-num">{formatRupiah(subtotal)}</span>
+              <span>Subtotal {taxMode === "include" && "(Inc. Tax)"}</span>
+              <span className="font-num">{formatRupiah(calculatedSubtotal)}</span>
             </div>
 
             {/* Promo selector */}
@@ -235,10 +240,10 @@ export function CartPanel({
                   type="number"
                   placeholder="0"
                   value={pointsToRedeem || ""}
-                  onChange={(e) => onPointsRedeemChange(Math.min(parseInt(e.target.value) || 0, customerPoints, subtotal))}
+                  onChange={(e) => onPointsRedeemChange(Math.min(parseInt(e.target.value) || 0, customerPoints, calculatedSubtotal))}
                   className="w-20 text-right text-[11px] h-6 font-num"
                   min={0}
-                  max={Math.min(customerPoints, subtotal)}
+                  max={Math.min(customerPoints, calculatedSubtotal)}
                 />
               </div>
             )}
@@ -251,10 +256,13 @@ export function CartPanel({
               </div>
             )}
 
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>PPN ({taxRateVal}%)</span>
-              <span className="font-num">{formatRupiah(tax)}</span>
-            </div>
+            {taxMode !== "no" && (
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{taxMode === "include" ? `${taxName} (${taxRate}%) Termasuk` : `${taxName} (${taxRate}%)`}</span>
+                <span className="font-num">{formatRupiah(taxAmount)}</span>
+              </div>
+            )}
+
             {/* Ongkir */}
             <div className="flex justify-between items-center text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
@@ -273,7 +281,7 @@ export function CartPanel({
             <div className="flex justify-between text-sm font-bold text-foreground">
               <span>Total</span>
               <span className="font-num text-gradient">
-                {formatRupiah(total)}
+                {formatRupiah(calculatedTotal)}
               </span>
             </div>
           </div>
@@ -297,7 +305,7 @@ export function CartPanel({
               onClick={onCheckout}
               className="flex-1 h-11 text-sm font-bold"
             >
-              Bayar — {formatRupiah(total)}
+              Bayar — {formatRupiah(calculatedTotal)}
             </Button>
           </div>
         </div>

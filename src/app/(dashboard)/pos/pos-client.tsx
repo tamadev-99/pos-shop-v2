@@ -124,7 +124,7 @@ interface StoreSettings {
   storeAddress: string;
   storePhone: string;
   taxRate: number;
-  taxEnabled: boolean;
+  taxIncluded: string;
   receiptHeader: string;
   receiptFooter: string;
   [key: string]: any;
@@ -330,8 +330,28 @@ export default function POSClient({ initialProducts, customers, promotions, prin
   const discountAmount = bestDiscount + pointsDiscount;
 
   const taxRate = storeSettings?.taxRate ?? 11;
-  const tax = Math.round((subtotal - bestDiscount) * (taxRate / 100));
-  const total = Math.max(0, subtotal - discountAmount + tax + shippingFee);
+  const taxMode = storeSettings?.taxIncluded ?? "no";
+
+  // Calculate raw subtotal minus discounts
+  const discountedSubtotal = Math.max(0, subtotal - discountAmount);
+
+  let tax = 0;
+  let total = discountedSubtotal + shippingFee;
+
+  if (taxMode === "exclude") {
+    // Pajak Ditambahkan (di luar harga normal)
+    tax = Math.round(discountedSubtotal * (taxRate / 100));
+    total += tax;
+  } else if (taxMode === "include") {
+    // Pajak Sudah Termasuk (harga barang = DPP + PPn)
+    // DPP = Harga / (1 + Rate)
+    // Tax = Harga - DPP
+    const dpp = discountedSubtotal / (1 + (taxRate / 100));
+    tax = Math.round(discountedSubtotal - dpp);
+    // Total remains discountedSubtotal + shippingFee (since tax is inside)
+  }
+  // If 'no', tax is 0 and total is just discountedSubtotal + shippingFee
+
   const cartItemCount = cart.reduce((sum, i) => sum + i.qty, 0);
 
   const findDBVariant = useCallback(
@@ -597,7 +617,10 @@ export default function POSClient({ initialProducts, customers, promotions, prin
           pointsToRedeem={pointsToRedeem}
           onPointsRedeemChange={setPointsToRedeem}
           discountAmount={discountAmount}
-          taxRate={taxRate}
+          taxAmount={tax}
+          taxMode={taxMode}
+          calculatedSubtotal={discountedSubtotal}
+          calculatedTotal={total}
         />
       </div>
 
@@ -651,7 +674,10 @@ export default function POSClient({ initialProducts, customers, promotions, prin
           pointsToRedeem={pointsToRedeem}
           onPointsRedeemChange={setPointsToRedeem}
           discountAmount={discountAmount}
-          taxRate={taxRate}
+          taxAmount={tax}
+          taxMode={taxMode}
+          calculatedSubtotal={discountedSubtotal}
+          calculatedTotal={total}
         />
       </div>
 
@@ -668,10 +694,11 @@ export default function POSClient({ initialProducts, customers, promotions, prin
         open={paymentOpen}
         onClose={handlePaymentClose}
         total={total}
-        subtotal={subtotal}
+        subtotal={discountedSubtotal}
         tax={tax}
         shippingFee={shippingFee}
         discountAmount={discountAmount}
+        taxMode={taxMode}
         onConfirm={handlePaymentConfirm}
       />
 
@@ -756,13 +783,14 @@ export default function POSClient({ initialProducts, customers, promotions, prin
           changeAmount={receiptData.changeAmount}
           cashierName={user?.name || "Kasir"}
           storeName={storeSettings?.storeName}
-          storeAddress={storeSettings?.storeAddress}
+          storeAddress={storeSettings?.receiptAddress}
           storePhone={storeSettings?.storePhone}
           receiptHeader={storeSettings?.receiptHeader}
           receiptFooter={storeSettings?.receiptFooter}
           printerType={storeSettings?.printerType}
           printerTarget={storeSettings?.printerTarget}
           receiptWidth={storeSettings?.receiptWidth}
+          taxName={storeSettings?.taxName || "PPN"}
         />
       )}
     </div>

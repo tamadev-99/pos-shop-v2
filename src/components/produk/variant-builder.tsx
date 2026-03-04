@@ -459,7 +459,7 @@ export function VariantBuilder({
         [key]: { ...row, ...prev[key], [field]: value },
       }));
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     [matrix]
   );
 

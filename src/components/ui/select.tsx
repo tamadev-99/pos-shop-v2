@@ -15,12 +15,17 @@ interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, options, placeholder, value, defaultValue, onChange, onValueChange, name, ...props }, ref) => {
+    const cleanValue = (v: any) => {
+      if (v === null || v === undefined) return "";
+      return String(v).replace(/^["']|["']$/g, "");
+    };
+
     const [isOpen, setIsOpen] = useState(false);
-    const [internalValue, setInternalValue] = useState(value ?? defaultValue ?? "");
+    const [internalValue, setInternalValue] = useState(() => cleanValue(value ?? defaultValue));
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-      if (value !== undefined) setInternalValue(value);
+      if (value !== undefined) setInternalValue(cleanValue(value));
     }, [value]);
 
     useEffect(() => {
@@ -33,7 +38,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const selectedOption = options.find((opt) => opt.value === internalValue);
+    const selectedOption = options.find((opt) => String(opt.value) === internalValue);
 
     const handleSelect = (val: string) => {
       if (value === undefined) setInternalValue(val);
@@ -81,12 +86,12 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
                     onClick={() => handleSelect(opt.value)}
                     className={cn(
                       "relative flex w-full cursor-pointer select-none items-center rounded-lg py-2 pl-8 pr-3 text-sm outline-none transition-colors duration-150",
-                      internalValue === opt.value
+                      internalValue === String(opt.value)
                         ? "bg-accent-muted text-accent font-medium"
                         : "hover:bg-surface text-foreground"
                     )}
                   >
-                    {internalValue === opt.value && (
+                    {internalValue === String(opt.value) && (
                       <span className="absolute left-2.5 flex h-3.5 w-3.5 items-center justify-center">
                         <Check size={14} />
                       </span>
