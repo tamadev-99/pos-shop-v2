@@ -43,7 +43,7 @@ export function Pagination({
         disabled={currentPage === 1}
         className={cn(
           "w-8 h-8 flex items-center justify-center rounded-lg transition-all",
-          "hover:bg-white/[0.06] disabled:opacity-30 disabled:pointer-events-none"
+          "hover:bg-surface disabled:opacity-30 disabled:pointer-events-none"
         )}
       >
         <ChevronLeft className="w-4 h-4" />
@@ -62,7 +62,7 @@ export function Pagination({
               "w-8 h-8 flex items-center justify-center rounded-lg text-xs font-medium transition-all",
               page === currentPage
                 ? "bg-accent/20 text-accent border border-accent/30"
-                : "hover:bg-white/[0.06] text-muted-foreground"
+                : "hover:bg-surface text-muted-foreground"
             )}
           >
             {page}
@@ -75,7 +75,7 @@ export function Pagination({
         disabled={currentPage === totalPages}
         className={cn(
           "w-8 h-8 flex items-center justify-center rounded-lg transition-all",
-          "hover:bg-white/[0.06] disabled:opacity-30 disabled:pointer-events-none"
+          "hover:bg-surface disabled:opacity-30 disabled:pointer-events-none"
         )}
       >
         <ChevronRight className="w-4 h-4" />

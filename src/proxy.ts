@@ -1,7 +1,8 @@
+import { getSessionCookie } from "better-auth/cookies";
 import { NextRequest, NextResponse } from "next/server";
 
 export function proxy(request: NextRequest) {
-  const sessionCookie = request.cookies.get("better-auth.session_token");
+  const sessionCookie = getSessionCookie(request);
 
   const isLoginPage = request.nextUrl.pathname === "/login";
   const isApiRoute = request.nextUrl.pathname.startsWith("/api");
@@ -22,5 +23,8 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons/).*)",
+  ],
 };
+

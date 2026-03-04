@@ -56,7 +56,7 @@ export function VariantTable({ variants, className }: VariantTableProps) {
     return (
       <div
         className={cn(
-          "rounded-2xl border border-dashed border-white/[0.08]",
+          "rounded-2xl border border-dashed border-border",
           "bg-white/[0.01] backdrop-blur-sm",
           "p-8 flex flex-col items-center justify-center gap-2 text-center",
           className
@@ -75,21 +75,21 @@ export function VariantTable({ variants, className }: VariantTableProps) {
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/[0.06] overflow-hidden",
+        "rounded-2xl border border-border overflow-hidden",
         "bg-white/[0.015] backdrop-blur-sm",
         "shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
         className
       )}
     >
       {/* Table header */}
-      <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between bg-white/[0.02]">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-surface">
         <p className="text-[11px] font-semibold text-muted-dim uppercase tracking-wider">
           Varian
         </p>
         <span
           className={cn(
             "text-[10px] px-1.5 py-0.5 rounded-md font-medium",
-            "bg-white/[0.05] border border-white/[0.08] text-muted-foreground font-num"
+            "bg-surface border border-border text-muted-foreground font-num"
           )}
         >
           {variants.length} varian
@@ -100,7 +100,7 @@ export function VariantTable({ variants, className }: VariantTableProps) {
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
-            <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+            <tr className="border-b border-border bg-surface">
               {/* Always visible */}
               <th className="px-3 py-2.5 text-[11px] font-semibold text-muted-dim uppercase tracking-wider whitespace-nowrap">
                 Warna
@@ -146,10 +146,10 @@ export function VariantTable({ variants, className }: VariantTableProps) {
                 <tr
                   key={variant.id}
                   className={cn(
-                    "border-b border-white/[0.04] transition-colors duration-150",
+                    "border-b border-border transition-colors duration-150",
                     lowStock
                       ? "bg-warning/[0.04] hover:bg-warning/[0.07]"
-                      : "hover:bg-white/[0.02]"
+                      : "hover:bg-surface"
                   )}
                 >
                   {/* Warna */}
@@ -178,7 +178,7 @@ export function VariantTable({ variants, className }: VariantTableProps) {
                     <span
                       className={cn(
                         "inline-block px-2 py-0.5 rounded-md text-[11px] font-medium whitespace-nowrap",
-                        "bg-white/[0.05] border border-white/[0.06] text-muted-foreground"
+                        "bg-surface border border-border text-muted-foreground"
                       )}
                     >
                       {variant.size}
@@ -249,7 +249,7 @@ export function VariantTable({ variants, className }: VariantTableProps) {
 
       {/* Low stock legend — only render when there are low-stock items */}
       {variants.some(isLowStock) && (
-        <div className="px-4 py-2.5 border-t border-white/[0.04] bg-warning/[0.03] flex items-center gap-2">
+        <div className="px-4 py-2.5 border-t border-border bg-warning/[0.03] flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-warning/60 flex-shrink-0" />
           <p className="text-[11px] text-warning/80">
             Baris dengan latar kuning menandakan stok di bawah atau sama dengan stok minimum.

@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { shifts } from "@/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export async function openShift(cashierId: string, openingBalance: number) {
@@ -41,7 +41,7 @@ export async function closeShift(
 
   if (!shift[0]) return;
 
-  const expectedClosing = shift[0].openingBalance + (shift[0].totalSales || 0);
+  const expectedClosing = shift[0].openingBalance + (shift[0].totalCashSales || 0);
   const difference = actualClosing - expectedClosing;
 
   await db
@@ -76,10 +76,52 @@ export async function getCurrentShift(cashierId: string) {
   return activeShift || null;
 }
 
-export async function getShiftHistory(limit?: number) {
-  return db.query.shifts.findMany({
-    orderBy: [desc(shifts.openedAt)],
-    limit: limit || 50,
-    with: { cashier: true },
-  });
+export async function checkCashierShift(cashierId: string) {
+  const activeShift = await getCurrentShift(cashierId);
+
+  if (!activeShift) {
+    return {
+      hasActiveShift: false,
+      isPreviousDay: false,
+      shiftId: null,
+      openedAt: null,
+    };
+  }
+
+  // Check if it's from a previous day based on local midnight timing
+  // We'll compare the start of today with the openedAt timestamp
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const openedAtDate = new Date(activeShift.openedAt);
+  const isPreviousDay = openedAtDate < startOfToday;
+
+  return {
+    hasActiveShift: true,
+    isPreviousDay,
+    shiftId: activeShift.id,
+    openedAt: activeShift.openedAt.toISOString(),
+  };
+}
+
+export async function getShiftHistory(page = 1, pageSize = 20) {
+  const offset = (page - 1) * pageSize;
+
+  const [data, countResult] = await Promise.all([
+    db.query.shifts.findMany({
+      orderBy: [desc(shifts.openedAt)],
+      limit: pageSize,
+      offset,
+      with: { cashier: true },
+    }),
+    db.select({ count: sql<number>`count(*)::int` }).from(shifts),
+  ]);
+
+  return {
+    data,
+    total: countResult[0]?.count ?? 0,
+    page,
+    pageSize,
+    totalPages: Math.ceil((countResult[0]?.count ?? 0) / pageSize),
+  };
 }

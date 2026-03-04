@@ -11,36 +11,29 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   default: [
-    "bg-gradient-to-r from-accent to-accent-secondary text-white font-semibold",
-    "shadow-[0_0_24px_-4px_rgba(16,185,129,0.3),inset_0_1px_0_rgba(255,255,255,0.15)]",
-    "hover:shadow-[0_0_36px_-4px_rgba(16,185,129,0.45),inset_0_1px_0_rgba(255,255,255,0.2)]",
-    "hover:brightness-110",
-    "border border-white/[0.1]",
+    "bg-accent text-accent-foreground font-semibold",
+    "shadow-[var(--shadow-sm)]",
+    "hover:bg-accent-hover hover:shadow-[var(--shadow-md)]",
+    "border border-accent/20",
   ].join(" "),
   secondary: [
-    "bg-white/[0.05] text-foreground border border-white/[0.08]",
-    "backdrop-blur-xl",
-    "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
-    "hover:bg-white/[0.08] hover:border-white/[0.14]",
-    "hover:shadow-[0_0_20px_-5px_rgba(255,255,255,0.05),inset_0_1px_0_rgba(255,255,255,0.08)]",
+    "bg-surface text-foreground border border-border",
+    "hover:bg-surface-hover hover:border-border-strong",
+    "shadow-[var(--shadow-sm)]",
   ].join(" "),
   ghost: [
     "text-muted-foreground",
-    "hover:text-foreground hover:bg-white/[0.06]",
-    "hover:backdrop-blur-sm",
+    "hover:text-foreground hover:bg-surface",
   ].join(" "),
   destructive: [
-    "bg-destructive/10 text-destructive border border-destructive/15",
-    "backdrop-blur-sm",
-    "shadow-[inset_0_1px_0_rgba(244,63,94,0.1)]",
+    "bg-destructive-muted text-destructive border border-destructive/15",
     "hover:bg-destructive/20 hover:border-destructive/25",
-    "hover:shadow-[0_0_20px_-5px_rgba(244,63,94,0.2),inset_0_1px_0_rgba(244,63,94,0.15)]",
+    "shadow-[var(--shadow-sm)]",
   ].join(" "),
   outline: [
-    "border border-white/[0.08] bg-white/[0.02] text-foreground",
-    "backdrop-blur-sm",
-    "shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
-    "hover:bg-white/[0.06] hover:border-white/[0.14]",
+    "border border-border bg-transparent text-foreground",
+    "hover:bg-surface hover:border-border-strong",
+    "shadow-[var(--shadow-sm)]",
   ].join(" "),
 };
 
@@ -58,10 +51,10 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         className={cn(
           "inline-flex items-center justify-center rounded-xl font-medium cursor-pointer",
-          "transition-all duration-300 ease-out",
+          "transition-all duration-200 ease-out",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           "disabled:opacity-40 disabled:pointer-events-none",
-          "active:scale-[0.96]",
+          "active:scale-[0.97]",
           variantStyles[variant],
           sizeStyles[size],
           className

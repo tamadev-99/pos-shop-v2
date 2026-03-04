@@ -107,6 +107,13 @@ export async function getDashboardStats() {
   const endOfDay = new Date();
   endOfDay.setHours(23, 59, 59, 999);
 
+  // Yesterday range
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const endOfYesterday = new Date(yesterday);
+  endOfYesterday.setHours(23, 59, 59, 999);
+
+  // Single query for today's order stats
   const todayOrders = await db
     .select()
     .from(orders)
@@ -118,46 +125,105 @@ export async function getDashboardStats() {
       )
     );
 
+  // Yesterday's orders for comparison
+  const yesterdayOrders = await db
+    .select()
+    .from(orders)
+    .where(
+      and(
+        eq(orders.status, "selesai"),
+        gte(orders.date, yesterday),
+        lte(orders.date, endOfYesterday)
+      )
+    );
+
   const totalSales = todayOrders.reduce((sum, o) => sum + o.total, 0);
   const totalOrders = todayOrders.length;
   const avgTransaction = totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0;
 
-  // Total products sold today
+  const yesterdaySales = yesterdayOrders.reduce((sum, o) => sum + o.total, 0);
+  const yesterdayOrderCount = yesterdayOrders.length;
+
+  // Fix #4: Single JOIN query for products sold today (was N+1)
+  const todayOrderIds = todayOrders.map((o) => o.id);
   let productsSold = 0;
-  for (const order of todayOrders) {
-    const items = await db
-      .select()
+  if (todayOrderIds.length > 0) {
+    const soldResult = await db
+      .select({
+        totalQty: sql<number>`COALESCE(SUM(${orderItems.qty}), 0)::int`,
+      })
       .from(orderItems)
-      .where(eq(orderItems.orderId, order.id));
-    productsSold += items.reduce((sum, item) => sum + item.qty, 0);
+      .where(
+        sql`${orderItems.orderId} IN (${sql.join(todayOrderIds.map(id => sql`${id}`), sql`, `)})`
+      );
+    productsSold = soldResult[0]?.totalQty ?? 0;
   }
 
-  // Weekly data for chart
-  const weekData = [];
+  // #13: Payment method breakdown
+  const paymentBreakdown: Record<string, number> = {};
+  for (const order of todayOrders) {
+    const method = order.paymentMethod || "tunai";
+    paymentBreakdown[method] = (paymentBreakdown[method] || 0) + order.total;
+  }
+
+  // #13: Low stock items (stock <= minStock)
+  const lowStockItems = await db
+    .select({
+      id: productVariants.id,
+      sku: productVariants.sku,
+      stock: productVariants.stock,
+      minStock: productVariants.minStock,
+      productName: products.name,
+      color: productVariants.color,
+      size: productVariants.size,
+    })
+    .from(productVariants)
+    .innerJoin(products, eq(productVariants.productId, products.id))
+    .where(
+      and(
+        eq(productVariants.status, "aktif"),
+        sql`${productVariants.stock} <= ${productVariants.minStock}`
+      )
+    )
+    .orderBy(productVariants.stock)
+    .limit(10);
+
+  // Fix #4: Single query for 7-day chart data (was 7 separate queries)
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 6);
+  weekAgo.setHours(0, 0, 0, 0);
+
+  const weekOrders = await db
+    .select()
+    .from(orders)
+    .where(
+      and(
+        eq(orders.status, "selesai"),
+        gte(orders.date, weekAgo),
+        lte(orders.date, endOfDay)
+      )
+    );
+
+  // Group by day in JS (faster than 7 DB queries)
+  const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+  const weekMap = new Map<string, number>();
+
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    d.setHours(0, 0, 0, 0);
-    const dEnd = new Date(d);
-    dEnd.setHours(23, 59, 59, 999);
-
-    const dayOrders = await db
-      .select()
-      .from(orders)
-      .where(
-        and(
-          eq(orders.status, "selesai"),
-          gte(orders.date, d),
-          lte(orders.date, dEnd)
-        )
-      );
-
-    const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
-    weekData.push({
-      day: dayNames[d.getDay()],
-      penjualan: dayOrders.reduce((sum, o) => sum + o.total, 0),
-    });
+    const key = d.toISOString().split("T")[0];
+    weekMap.set(key, 0);
   }
+
+  for (const order of weekOrders) {
+    const key = order.date.toISOString().split("T")[0];
+    weekMap.set(key, (weekMap.get(key) || 0) + order.total);
+  }
+
+  const weekData = Array.from(weekMap.entries()).map(([dateStr, sales]) => ({
+    day: dayNames[new Date(dateStr).getDay()],
+    penjualan: sales,
+  }));
 
   return {
     totalSales,
@@ -165,5 +231,10 @@ export async function getDashboardStats() {
     avgTransaction,
     productsSold,
     weekData,
+    // New: #13 enrichment data
+    yesterdaySales,
+    yesterdayOrderCount,
+    paymentBreakdown,
+    lowStockItems,
   };
 }

@@ -35,16 +35,15 @@ function Dialog({ open, onClose, children, className }: DialogProps) {
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      {/* Glass overlay backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-lg animate-fade-in" />
-      {/* Glass panel */}
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" />
+      {/* Panel */}
       <div
         className={cn(
           "relative z-10 w-full max-w-lg p-6",
-          "bg-[#0f1019]/85 backdrop-blur-2xl",
-          "rounded-2xl border border-white/[0.08]",
-          "gradient-border glass-shimmer",
-          "shadow-[0_16px_64px_-12px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.04),inset_0_1px_0_rgba(255,255,255,0.06)]",
+          "bg-card-solid",
+          "rounded-2xl border border-border",
+          "shadow-[var(--shadow-lg)]",
           "animate-scale-in",
           className
         )}
@@ -72,7 +71,7 @@ function DialogClose({ onClose }: { onClose: () => void }) {
   return (
     <button
       onClick={onClose}
-      className="absolute right-4 top-4 p-1.5 rounded-xl text-muted-dim hover:text-foreground hover:bg-white/[0.06] transition-all duration-200 cursor-pointer backdrop-blur-sm"
+      className="absolute right-4 top-4 p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition-all duration-200 cursor-pointer"
     >
       <X size={16} />
     </button>

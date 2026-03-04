@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { formatRupiah } from "@/lib/utils";
-import { Minus, Plus, ShoppingCart, Trash2, X, Pause, Truck } from "lucide-react";
+import { Minus, Plus, ShoppingCart, Trash2, X, Pause, Truck, Tag, Star, Coins } from "lucide-react";
+import type { Promotion } from "@/app/(dashboard)/pos/pos-client";
 
 export interface CartItem {
   id: string;
@@ -31,6 +32,17 @@ interface CartPanelProps {
   onHold?: () => void;
   heldCount?: number;
   customers?: { id: string; name: string }[];
+  // Promotions & discounts
+  promotions?: Promotion[];
+  selectedPromo?: Promotion | null;
+  onPromoChange?: (promo: Promotion | null) => void;
+  customerTier?: string;
+  tierDiscountPct?: number;
+  customerPoints?: number;
+  pointsToRedeem?: number;
+  onPointsRedeemChange?: (points: number) => void;
+  discountAmount?: number;
+  taxRate?: number;
 }
 
 export function CartPanel({
@@ -47,25 +59,44 @@ export function CartPanel({
   onHold,
   heldCount = 0,
   customers = [],
+  promotions = [],
+  selectedPromo,
+  onPromoChange,
+  customerTier,
+  tierDiscountPct = 0,
+  customerPoints = 0,
+  pointsToRedeem = 0,
+  onPointsRedeemChange,
+  discountAmount = 0,
+  taxRate,
 }: CartPanelProps) {
   const customerOptions = [
     { label: "Pelanggan Umum", value: "" },
     ...customers.map((c) => ({ label: c.name, value: c.id })),
   ];
 
+  const promoOptions = [
+    { label: "Tidak ada promo", value: "" },
+    ...promotions.map((p) => ({
+      label: `${p.name} (${p.type === "percentage" ? `${p.value}%` : p.type === "fixed" ? formatRupiah(p.value) : p.type === "buy_x_get_y" ? `Beli ${p.buyQty} Gratis ${p.getQty}` : formatRupiah(p.value)})`,
+      value: p.id,
+    })),
+  ];
+
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const tax = Math.round(subtotal * 0.11);
-  const total = subtotal + tax + shippingFee;
+  const taxRateVal = taxRate ?? 11;
+  const tax = Math.round((subtotal - Math.max(0, discountAmount - (pointsToRedeem || 0))) * (taxRateVal / 100));
+  const total = Math.max(0, subtotal - discountAmount + tax + shippingFee);
 
   return (
-    <div className="flex flex-col h-full border-l border-white/[0.06] bg-white/[0.02] backdrop-blur-xl">
+    <div className="flex flex-col h-full border-l border-border bg-surface backdrop-blur-xl">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 h-14 border-b border-white/[0.06] shrink-0">
+      <div className="flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
           <ShoppingCart size={16} className="text-accent drop-shadow-[0_0_6px_rgba(16,185,129,0.4)]" />
           <h2 className="text-sm font-semibold text-foreground font-[family-name:var(--font-display)]">Keranjang</h2>
           {items.length > 0 && (
-            <span className="flex items-center justify-center min-w-5 h-5 rounded-full bg-gradient-to-r from-accent to-accent-secondary px-1.5 text-[10px] font-bold text-white shadow-[0_0_12px_-2px_rgba(16,185,129,0.4)]">
+            <span className="flex items-center justify-center min-w-5 h-5 rounded-full bg-gradient-to-r from-accent to-accent-hover px-1.5 text-[10px] font-bold text-white shadow-[0_0_12px_-2px_rgba(16,185,129,0.4)]">
               {items.reduce((sum, i) => sum + i.qty, 0)}
             </span>
           )}
@@ -82,7 +113,7 @@ export function CartPanel({
           {onClose && (
             <button
               onClick={onClose}
-              className="lg:hidden p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition-colors cursor-pointer"
+              className="lg:hidden p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition-colors cursor-pointer"
             >
               <X size={18} />
             </button>
@@ -91,7 +122,7 @@ export function CartPanel({
       </div>
 
       {/* Customer Selector */}
-      <div className="px-3 py-2 border-b border-white/[0.06] shrink-0">
+      <div className="px-3 py-2 border-b border-border shrink-0 space-y-1.5">
         <Select
           options={customerOptions}
           value={selectedCustomer}
@@ -99,6 +130,15 @@ export function CartPanel({
           placeholder="Pelanggan Umum"
           className="text-xs"
         />
+        {/* Show tier badge when customer selected */}
+        {selectedCustomer && customerTier && tierDiscountPct > 0 && (
+          <div className="flex items-center gap-1.5 px-1">
+            <Star size={10} className="text-amber-400" />
+            <span className="text-[10px] text-amber-400 font-medium">
+              Member {customerTier} — Diskon {tierDiscountPct}%
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Items */}
@@ -115,7 +155,7 @@ export function CartPanel({
           items.map((item) => (
             <div
               key={item.id}
-              className="flex items-center gap-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] p-2.5 transition-all duration-300 hover:bg-white/[0.05] hover:border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+              className="flex items-center gap-2.5 rounded-xl bg-surface border border-border p-2.5 transition-all duration-300 hover:bg-surface hover:border-border shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
             >
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-foreground truncate">
@@ -135,7 +175,7 @@ export function CartPanel({
                       ? onRemove(item.id)
                       : onUpdateQty(item.id, item.qty - 1)
                   }
-                  className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.06] text-muted-foreground hover:text-foreground hover:bg-white/[0.08] transition-all cursor-pointer backdrop-blur-sm"
+                  className="flex items-center justify-center w-7 h-7 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-surface-hover transition-all cursor-pointer backdrop-blur-sm"
                 >
                   <Minus size={11} />
                 </button>
@@ -144,7 +184,7 @@ export function CartPanel({
                 </span>
                 <button
                   onClick={() => onUpdateQty(item.id, item.qty + 1)}
-                  className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.06] text-muted-foreground hover:text-foreground hover:bg-white/[0.08] transition-all cursor-pointer backdrop-blur-sm"
+                  className="flex items-center justify-center w-7 h-7 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-surface-hover transition-all cursor-pointer backdrop-blur-sm"
                 >
                   <Plus size={11} />
                 </button>
@@ -162,14 +202,57 @@ export function CartPanel({
 
       {/* Summary */}
       {items.length > 0 && (
-        <div className="border-t border-white/[0.06] p-4 space-y-3 shrink-0 bg-white/[0.01]">
+        <div className="border-t border-border p-4 space-y-3 shrink-0 bg-white/[0.01]">
           <div className="space-y-2">
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Subtotal</span>
               <span className="font-num">{formatRupiah(subtotal)}</span>
             </div>
+
+            {/* Promo selector */}
+            {promotions.length > 0 && onPromoChange && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Tag size={12} className="text-violet-400 shrink-0" />
+                <Select
+                  options={promoOptions}
+                  value={selectedPromo?.id || ""}
+                  onChange={(e) => {
+                    const promo = promotions.find((p) => p.id === e.target.value) || null;
+                    onPromoChange(promo);
+                  }}
+                  placeholder="Pilih promo"
+                  className="text-[11px] flex-1"
+                />
+              </div>
+            )}
+
+            {/* Points redemption */}
+            {selectedCustomer && customerPoints > 0 && onPointsRedeemChange && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Coins size={12} className="text-amber-400 shrink-0" />
+                <span className="text-[11px] shrink-0">Poin ({customerPoints})</span>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={pointsToRedeem || ""}
+                  onChange={(e) => onPointsRedeemChange(Math.min(parseInt(e.target.value) || 0, customerPoints, subtotal))}
+                  className="w-20 text-right text-[11px] h-6 font-num"
+                  min={0}
+                  max={Math.min(customerPoints, subtotal)}
+                />
+              </div>
+            )}
+
+            {/* Discount row */}
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-xs text-rose-400">
+                <span>Diskon</span>
+                <span className="font-num">-{formatRupiah(discountAmount)}</span>
+              </div>
+            )}
+
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>PPN (11%)</span>
+              <span>PPN ({taxRateVal}%)</span>
               <span className="font-num">{formatRupiah(tax)}</span>
             </div>
             {/* Ongkir */}
@@ -186,7 +269,7 @@ export function CartPanel({
                 className="w-24 text-right text-xs h-7 font-num"
               />
             </div>
-            <div className="h-px bg-white/[0.06] my-1" />
+            <div className="h-px bg-surface my-1" />
             <div className="flex justify-between text-sm font-bold text-foreground">
               <span>Total</span>
               <span className="font-num text-gradient">

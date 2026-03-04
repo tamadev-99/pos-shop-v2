@@ -8,6 +8,34 @@
       "when": 1772352577896,
       "tag": "0000_lying_daredevil",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772444874618,
+      "tag": "0001_sticky_mesmero",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772535434579,
+      "tag": "0002_glorious_prodigy",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1772542325498,
+      "tag": "0003_fantastic_carnage",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772590104807,
+      "tag": "0004_safe_true_believers",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { promotions } from "@/db/schema";
 import { eq, and, lte, gte, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/actions/auth-helpers";
 
 export async function getPromotions(filters?: { active?: boolean }) {
   if (filters?.active !== undefined) {
@@ -45,6 +46,7 @@ export async function createPromotion(data: {
   appliesTo?: "all" | "category" | "product";
   targetIds?: string[];
 }) {
+  await requireRole("manager", "owner");
   const id = crypto.randomUUID();
 
   await db.insert(promotions).values({
@@ -77,11 +79,13 @@ export async function updatePromotion(
     endDate: string;
   }>
 ) {
+  await requireRole("manager", "owner");
   await db.update(promotions).set(data).where(eq(promotions.id, id));
   revalidatePath("/promosi");
 }
 
 export async function deletePromotion(id: string) {
+  await requireRole("manager", "owner");
   await db.delete(promotions).where(eq(promotions.id, id));
   revalidatePath("/promosi");
 }

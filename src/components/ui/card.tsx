@@ -1,32 +1,21 @@
 import { cn } from "@/lib/utils";
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  glow?: "accent" | "success" | "warning" | "destructive";
   hover?: boolean;
 }
 
-const glowColors = {
-  accent: "hover:shadow-[0_0_35px_-10px_rgba(16,185,129,0.2),0_8px_25px_-8px_rgba(0,0,0,0.3)]",
-  success: "hover:shadow-[0_0_35px_-10px_rgba(16,185,129,0.2),0_8px_25px_-8px_rgba(0,0,0,0.3)]",
-  warning: "hover:shadow-[0_0_35px_-10px_rgba(245,158,11,0.2),0_8px_25px_-8px_rgba(0,0,0,0.3)]",
-  destructive: "hover:shadow-[0_0_35px_-10px_rgba(244,63,94,0.2),0_8px_25px_-8px_rgba(0,0,0,0.3)]",
-};
-
-function Card({ className, glow, hover = false, ...props }: CardProps) {
+function Card({ className, hover = false, ...props }: CardProps) {
   return (
     <div
       className={cn(
         "rounded-2xl text-card-foreground",
-        "bg-white/[0.035] backdrop-blur-xl",
-        "border border-white/[0.07]",
-        "shadow-[0_4px_24px_-4px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.05)]",
-        "gradient-border glass-shimmer",
+        "bg-card border border-border",
+        "shadow-[var(--shadow-card)]",
         hover && [
-          "transition-all duration-300 ease-out cursor-default",
-          "hover:-translate-y-1 hover:border-white/[0.12]",
-          "hover:bg-white/[0.05]",
+          "transition-all duration-200 ease-out cursor-default",
+          "hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]",
+          "hover:border-border-strong",
         ],
-        glow && glowColors[glow],
         className
       )}
       {...props}

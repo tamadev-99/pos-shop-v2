@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { formatRupiah, formatNumber } from "@/lib/utils";
-import { TrendingUp, TrendingDown, ShoppingCart, DollarSign, BarChart3, Package } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ShoppingCart, DollarSign, BarChart3, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface StatsCardsProps {
@@ -11,26 +11,42 @@ interface StatsCardsProps {
     totalOrders: number;
     avgTransaction: number;
     productsSold: number;
+    yesterdaySales?: number;
+    yesterdayOrderCount?: number;
+  };
+}
+
+function calcChange(today: number, yesterday: number): { pct: string; trend: "up" | "down" | "neutral" } {
+  if (yesterday === 0 && today === 0) return { pct: "0%", trend: "neutral" };
+  if (yesterday === 0) return { pct: "+100%", trend: "up" };
+  const change = ((today - yesterday) / yesterday) * 100;
+  if (Math.abs(change) < 0.5) return { pct: "0%", trend: "neutral" };
+  return {
+    pct: `${change > 0 ? "+" : ""}${change.toFixed(0)}%`,
+    trend: change > 0 ? "up" : "down",
   };
 }
 
 export function StatsCards({ stats }: StatsCardsProps) {
+  const salesChange = calcChange(stats.totalSales, stats.yesterdaySales ?? 0);
+  const ordersChange = calcChange(stats.totalOrders, stats.yesterdayOrderCount ?? 0);
+
   const displayStats = [
     {
       label: "Penjualan Hari Ini",
       value: formatRupiah(stats.totalSales),
-      change: "+0%", // can be dynamic later
-      trend: "up" as const,
+      change: salesChange.pct,
+      trend: salesChange.trend,
       icon: DollarSign,
-      gradient: "from-emerald-500/20 to-teal-500/20",
-      iconColor: "text-emerald-400",
+      gradient: "from-violet-500/20 to-indigo-600/20",
+      iconColor: "text-accent",
       glowColor: "shadow-[0_0_20px_-6px_rgba(16,185,129,0.25)]",
     },
     {
       label: "Total Pesanan",
       value: formatNumber(stats.totalOrders),
-      change: "+0%",
-      trend: "up" as const,
+      change: ordersChange.pct,
+      trend: ordersChange.trend,
       icon: ShoppingCart,
       gradient: "from-cyan-500/20 to-blue-500/20",
       iconColor: "text-cyan-400",
@@ -39,8 +55,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
     {
       label: "Rata-rata Transaksi",
       value: formatRupiah(stats.avgTransaction),
-      change: "0%",
-      trend: "up" as const,
+      trend: "neutral" as const,
       icon: BarChart3,
       gradient: "from-violet-500/20 to-purple-500/20",
       iconColor: "text-violet-400",
@@ -49,8 +64,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
     {
       label: "Produk Terjual",
       value: formatNumber(stats.productsSold),
-      change: "+0%",
-      trend: "up" as const,
+      trend: "neutral" as const,
       icon: Package,
       gradient: "from-amber-500/20 to-orange-500/20",
       iconColor: "text-amber-400",
@@ -79,24 +93,32 @@ export function StatsCards({ stats }: StatsCardsProps) {
               <stat.icon size={18} className={stat.iconColor} />
             </div>
           </div>
-          <div className="flex items-center gap-1.5 mt-2 md:mt-3">
-            {stat.trend === "up" ? (
-              <TrendingUp size={13} className="text-success" />
-            ) : (
-              <TrendingDown size={13} className="text-destructive" />
-            )}
-            <span
-              className={cn(
-                "text-[10px] md:text-[11px] font-semibold font-num",
-                stat.trend === "up" ? "text-success" : "text-destructive"
+          {stat.change && (
+            <div className="flex items-center gap-1.5 mt-2 md:mt-3">
+              {stat.trend === "up" ? (
+                <TrendingUp size={13} className="text-success" />
+              ) : stat.trend === "down" ? (
+                <TrendingDown size={13} className="text-destructive" />
+              ) : (
+                <Minus size={13} className="text-muted-foreground" />
               )}
-            >
-              {stat.change}
-            </span>
-            <span className="text-[10px] md:text-[11px] text-muted-dim hidden sm:inline">
-              vs kemarin
-            </span>
-          </div>
+              <span
+                className={cn(
+                  "text-[10px] md:text-[11px] font-semibold font-num",
+                  stat.trend === "up"
+                    ? "text-success"
+                    : stat.trend === "down"
+                      ? "text-destructive"
+                      : "text-muted-foreground"
+                )}
+              >
+                {stat.change}
+              </span>
+              <span className="text-[10px] md:text-[11px] text-muted-dim hidden sm:inline">
+                vs kemarin
+              </span>
+            </div>
+          )}
         </Card>
       ))}
     </div>

@@ -32,16 +32,16 @@ export function ProductGrid({ products, onSelectProduct }: ProductGridProps) {
             key={product.id}
             onClick={() => onSelectProduct(product)}
             className="group flex flex-col rounded-2xl p-2.5 md:p-3 text-left cursor-pointer
-              bg-white/[0.025] backdrop-blur-sm border border-white/[0.06]
+              bg-white/[0.025] backdrop-blur-sm border border-border
               shadow-[0_2px_12px_-4px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.03)]
               transition-all duration-300 ease-out
-              hover:bg-white/[0.05] hover:border-accent/20
+              hover:bg-surface hover:border-accent/20
               hover:shadow-[0_8px_32px_-8px_rgba(16,185,129,0.12),0_0_0_1px_rgba(16,185,129,0.08),inset_0_1px_0_rgba(255,255,255,0.06)]
               hover:-translate-y-1
               active:scale-[0.97] active:translate-y-0"
           >
             {/* Image placeholder */}
-            <div className="w-full aspect-square rounded-xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] mb-2 md:mb-2.5 flex items-center justify-center overflow-hidden border border-white/[0.04]">
+            <div className="w-full aspect-square rounded-xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] mb-2 md:mb-2.5 flex items-center justify-center overflow-hidden border border-border">
               <Package
                 size={24}
                 className="text-muted-dim/30 group-hover:text-accent/25 transition-colors duration-300"

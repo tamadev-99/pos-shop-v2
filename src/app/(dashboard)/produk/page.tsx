@@ -1,11 +1,27 @@
-import { getProducts, getCategories } from "@/lib/actions/products";
+import { getProducts, getCategories, getAllVariantsFlat } from "@/lib/actions/products";
+import { getSuppliers } from "@/lib/actions/suppliers";
 import ProdukClient from "./produk-client";
 
 export default async function ProdukPage() {
-  const [products, categories] = await Promise.all([
-    getProducts(),
+  const [productsResult, categories, suppliers, variants] = await Promise.all([
+    getProducts({ limit: 10, offset: 0 }),
     getCategories(),
+    getSuppliers(),
+    getAllVariantsFlat(),
   ]);
 
-  return <ProdukClient initialProducts={products} categories={categories} />;
+  const categoriesWithCount = categories.map((cat) => ({
+    ...cat,
+    productCount: productsResult.data.filter((p) => p.categoryId === cat.id).length,
+  }));
+
+  return (
+    <ProdukClient
+      initialProducts={productsResult.data}
+      totalProducts={productsResult.totalRecords}
+      categories={categoriesWithCount}
+      suppliers={suppliers}
+      initialVariants={variants}
+    />
+  );
 }

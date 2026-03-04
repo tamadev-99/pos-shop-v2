@@ -6,10 +6,22 @@ import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
-import { Save, Store, User, Receipt, Users, Percent, Trash2, Printer, Usb, Wifi, Bluetooth } from "lucide-react";
+import { Save, Store, User, Receipt, Users, Percent, Trash2, Printer, Usb, Wifi, Bluetooth, Loader2, AlertTriangle, CheckCircle } from "lucide-react";
 import { useState, useTransition } from "react";
 import { updateSetting, updateUserRole } from "@/lib/actions/settings";
 import { toast } from "sonner";
+import {
+  buildTestPageCommands,
+  printReceipt,
+  connectUSBPrinter,
+  connectBluetoothPrinter,
+  isWebUSBSupported,
+  isWebBluetoothSupported,
+  type PrinterConfig,
+} from "@/lib/thermal-printer";
+import { BarcodeTab } from "./barcode-tab";
+import { AuditLogTab } from "./audit-log-tab";
+import { AkunTab } from "./akun-tab";
 
 const settingsTabs = [
   { label: "Toko", value: "toko" },
@@ -18,6 +30,8 @@ const settingsTabs = [
   { label: "Struk", value: "struk" },
   { label: "Printer", value: "printer" },
   { label: "Pengguna", value: "pengguna" },
+  { label: "Barcode", value: "barcode" },
+  { label: "Audit Log", value: "audit-log" },
 ];
 
 interface UserData {
@@ -31,9 +45,11 @@ interface UserData {
 interface Props {
   initialSettings: Record<string, any>;
   users: UserData[];
+  auditLogs: any[];
+  variants: any[];
 }
 
-export default function PengaturanClient({ initialSettings, users }: Props) {
+export default function PengaturanClient({ initialSettings, users, auditLogs, variants }: Props) {
   const [activeTab, setActiveTab] = useState("toko");
   const [isPending, startTransition] = useTransition();
 
@@ -80,14 +96,22 @@ export default function PengaturanClient({ initialSettings, users }: Props) {
   const handleSaveReceipt = (e: React.FormEvent) => {
     e.preventDefault();
     startTransition(async () => {
-      await updateSetting("receiptHeader", receiptHeader);
-      await updateSetting("receiptAddress", receiptAddress);
-      await updateSetting("receiptFooter", receiptFooter);
-      await updateSetting("receiptWidth", receiptWidth);
-      await updateSetting("receiptLogo", receiptLogo);
-      toast.success("Template struk berhasil disimpan!");
+      try {
+        await updateSetting("receiptHeader", receiptHeader);
+        await updateSetting("receiptAddress", receiptAddress);
+        await updateSetting("receiptFooter", receiptFooter);
+        await updateSetting("receiptWidth", receiptWidth);
+        await updateSetting("receiptLogo", receiptLogo);
+        toast.success("Template struk berhasil disimpan!");
+      } catch (error: any) {
+        toast.error(error.message || "Gagal menyimpan template struk");
+      }
     });
   };
+
+  const [printerStatus, setPrinterStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
+  const [printerStatusMsg, setPrinterStatusMsg] = useState("");
+  const [isTesting, setIsTesting] = useState(false);
 
   const handleSavePrinter = (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,6 +120,64 @@ export default function PengaturanClient({ initialSettings, users }: Props) {
       await updateSetting("printerTarget", printerTarget);
       toast.success("Pengaturan printer berhasil disimpan!");
     });
+  };
+
+  const handleConnectPrinter = async () => {
+    setPrinterStatus("connecting");
+    setPrinterStatusMsg("Menghubungkan...");
+    try {
+      if (printerType === "usb") {
+        if (!isWebUSBSupported()) {
+          throw new Error("WebUSB tidak didukung di browser ini. Gunakan Chrome/Edge.");
+        }
+        await connectUSBPrinter();
+        setPrinterStatus("connected");
+        setPrinterStatusMsg("Printer USB terhubung");
+        toast.success("Printer USB berhasil terhubung!");
+      } else if (printerType === "bluetooth") {
+        if (!isWebBluetoothSupported()) {
+          throw new Error("Web Bluetooth tidak didukung di browser ini. Gunakan Chrome/Edge.");
+        }
+        await connectBluetoothPrinter();
+        setPrinterStatus("connected");
+        setPrinterStatusMsg("Printer Bluetooth terhubung");
+        toast.success("Printer Bluetooth berhasil terhubung!");
+      } else if (printerType === "network") {
+        // For network, we just validate the IP format
+        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/;
+        if (!printerTarget || !ipRegex.test(printerTarget)) {
+          throw new Error("Masukkan alamat IP printer yang valid (contoh: 192.168.1.100)");
+        }
+        setPrinterStatus("connected");
+        setPrinterStatusMsg(`Target: ${printerTarget}`);
+        toast.success("Konfigurasi jaringan siap!");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Gagal menghubungkan printer";
+      setPrinterStatus("error");
+      setPrinterStatusMsg(message);
+      toast.error(message);
+    }
+  };
+
+  const handleTestPrint = async () => {
+    setIsTesting(true);
+    try {
+      const paperWidth = (initialSettings["receiptWidth"] as string) === "80" ? "80" as const : "58" as const;
+      const commands = buildTestPageCommands(paperWidth);
+      const config: PrinterConfig = {
+        type: printerType as "usb" | "bluetooth" | "network",
+        target: printerTarget,
+        paperWidth,
+      };
+      await printReceipt(commands, config);
+      toast.success("Test print berhasil dikirim ke printer!");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Gagal test print";
+      toast.error(message);
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   const handleChangeRole = (userId: string, newRole: string) => {
@@ -126,8 +208,8 @@ export default function PengaturanClient({ initialSettings, users }: Props) {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center shadow-[0_0_12px_-3px_rgba(16,185,129,0.25)]">
-                  <Store size={15} className="text-emerald-400" />
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500/20 to-indigo-600/20 flex items-center justify-center shadow-[0_0_12px_-3px_rgba(16,185,129,0.25)]">
+                  <Store size={15} className="text-accent" />
                 </div>
                 <div>
                   <CardTitle>Informasi Toko</CardTitle>
@@ -172,6 +254,11 @@ export default function PengaturanClient({ initialSettings, users }: Props) {
               </form>
             </CardContent>
           </Card>
+        )}
+
+        {/* Akun */}
+        {activeTab === "akun" && (
+          <AkunTab />
         )}
 
         {/* Pajak */}
@@ -313,7 +400,7 @@ export default function PengaturanClient({ initialSettings, users }: Props) {
                 <div>
                   <CardTitle>Pengaturan Printer Thermal</CardTitle>
                   <CardDescription>
-                    Konfigurasi koneksi dan preferensi cetak
+                    Konfigurasi koneksi printer thermal via USB, Bluetooth, atau jaringan (LAN)
                   </CardDescription>
                 </div>
               </div>
@@ -326,32 +413,95 @@ export default function PengaturanClient({ initialSettings, users }: Props) {
                   </label>
                   <Select
                     options={[
-                      { label: "USB", value: "usb" },
-                      { label: "Bluetooth", value: "bluetooth" },
-                      { label: "Network (IP)", value: "network" },
+                      { label: "USB (WebUSB)", value: "usb" },
+                      { label: "Bluetooth (Web Bluetooth)", value: "bluetooth" },
+                      { label: "Network / LAN (TCP)", value: "network" },
                     ]}
                     value={printerType}
-                    onChange={(e) => setPrinterType(e.target.value)}
+                    onChange={(e) => {
+                      setPrinterType(e.target.value);
+                      setPrinterStatus("idle");
+                      setPrinterStatusMsg("");
+                    }}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Nama Printer / Alamat IP
-                  </label>
-                  <Input value={printerTarget} onChange={(e) => setPrinterTarget(e.target.value)} placeholder="Nama printer atau alamat IP" />
+
+                {/* Connection-type specific help */}
+                <div className="rounded-xl bg-surface border border-border p-3 space-y-1.5">
+                  {printerType === "usb" && (
+                    <>
+                      <p className="text-[11px] font-medium text-sky-400 flex items-center gap-1"><Usb size={12} /> Koneksi USB (WebUSB)</p>
+                      <p className="text-[10px] text-muted-dim">Klik &quot;Hubungkan Printer&quot; untuk memilih printer dari daftar perangkat USB. Memerlukan browser Chrome/Edge dan HTTPS.</p>
+                      <p className="text-[10px] text-muted-dim">Windows: Mungkin perlu driver WinUSB (via Zadig) agar WebUSB bisa mengakses printer.</p>
+                    </>
+                  )}
+                  {printerType === "bluetooth" && (
+                    <>
+                      <p className="text-[11px] font-medium text-violet-400 flex items-center gap-1"><Bluetooth size={12} /> Koneksi Bluetooth</p>
+                      <p className="text-[10px] text-muted-dim">Klik &quot;Hubungkan Printer&quot; untuk memilih printer Bluetooth yang sudah dipasangkan. Memerlukan browser Chrome/Edge.</p>
+                      <p className="text-[10px] text-muted-dim">Pastikan Bluetooth aktif dan printer dalam mode pairing.</p>
+                    </>
+                  )}
+                  {printerType === "network" && (
+                    <>
+                      <p className="text-[11px] font-medium text-accent flex items-center gap-1"><Wifi size={12} /> Koneksi Network (LAN)</p>
+                      <p className="text-[10px] text-muted-dim">Masukkan alamat IP printer thermal di jaringan lokal. Port default: 9100.</p>
+                      <p className="text-[10px] text-muted-dim">Contoh: 192.168.1.100 atau 192.168.1.100:9100</p>
+                    </>
+                  )}
                 </div>
+
+                {printerType === "network" && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Alamat IP Printer
+                    </label>
+                    <Input
+                      value={printerTarget}
+                      onChange={(e) => setPrinterTarget(e.target.value)}
+                      placeholder="192.168.1.100"
+                    />
+                  </div>
+                )}
+
+                {/* Connection status */}
+                {printerStatus !== "idle" && (
+                  <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs ${printerStatus === "connected" ? "border-accent-500/20 bg-accent/5 text-accent" :
+                    printerStatus === "error" ? "border-red-500/20 bg-red-500/5 text-red-400" :
+                      "border-sky-500/20 bg-sky-500/5 text-sky-400"
+                    }`}>
+                    {printerStatus === "connecting" && <Loader2 size={14} className="animate-spin" />}
+                    {printerStatus === "connected" && <CheckCircle size={14} />}
+                    {printerStatus === "error" && <AlertTriangle size={14} />}
+                    <span>{printerStatusMsg}</span>
+                  </div>
+                )}
+
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   <Button type="submit" disabled={isPending}>
                     <Save size={14} />
-                    Simpan Perubahan
+                    Simpan
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => toast("Test print berhasil dikirim!")}
+                    onClick={handleConnectPrinter}
+                    disabled={printerStatus === "connecting"}
                   >
-                    <Printer size={14} />
-                    Test Print
+                    {printerStatus === "connecting" ? <Loader2 size={14} className="animate-spin" /> :
+                      printerType === "usb" ? <Usb size={14} /> :
+                        printerType === "bluetooth" ? <Bluetooth size={14} /> :
+                          <Wifi size={14} />}
+                    {printerType === "network" ? "Validasi IP" : "Hubungkan Printer"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleTestPrint}
+                    disabled={isTesting}
+                  >
+                    {isTesting ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+                    {isTesting ? "Mencetak..." : "Test Print"}
                   </Button>
                 </div>
               </form>
@@ -379,7 +529,7 @@ export default function PengaturanClient({ initialSettings, users }: Props) {
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="border-b border-white/[0.06]">
+                    <tr className="border-b border-border">
                       <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">
                         Nama
                       </th>
@@ -395,7 +545,7 @@ export default function PengaturanClient({ initialSettings, users }: Props) {
                     {users.map((user) => (
                       <tr
                         key={user.id}
-                        className="border-b border-white/[0.04] last:border-0 hover:bg-white/[0.025] transition-all duration-300"
+                        className="border-b border-border last:border-0 hover:bg-white/[0.025] transition-all duration-300"
                       >
                         <td className="py-3 text-xs font-medium text-foreground">
                           {user.name}
@@ -421,6 +571,16 @@ export default function PengaturanClient({ initialSettings, users }: Props) {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Barcode */}
+        {activeTab === "barcode" && (
+          <BarcodeTab variants={variants} />
+        )}
+
+        {/* Audit Log */}
+        {activeTab === "audit-log" && (
+          <AuditLogTab auditLogs={auditLogs} />
         )}
       </div>
     </div>

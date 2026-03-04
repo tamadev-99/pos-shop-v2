@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { products, productVariants, categories } from "@/db/schema";
 import { eq, like, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { createAuditLog } from "@/lib/actions/audit";
+import { requireRole, getCurrentUser } from "@/lib/actions/auth-helpers";
 
 export async function getCategories() {
   return db.select().from(categories).orderBy(categories.name);
@@ -13,6 +15,8 @@ export async function getProducts(filters?: {
   search?: string;
   categoryId?: string;
   status?: string;
+  offset?: number;
+  limit?: number;
 }) {
   const conditions = [];
   if (filters?.search) {
@@ -25,16 +29,30 @@ export async function getProducts(filters?: {
     conditions.push(eq(products.status, filters.status as "aktif" | "nonaktif"));
   }
 
-  const result = await db.query.products.findMany({
-    where: conditions.length > 0 ? and(...conditions) : undefined,
-    with: {
-      variants: true,
-      category: true,
-    },
-    orderBy: [desc(products.createdAt)],
-  });
+  const whereCondition = conditions.length > 0 ? and(...conditions) : undefined;
 
-  return result;
+  const [data, total] = await Promise.all([
+    db.query.products.findMany({
+      where: whereCondition,
+      with: {
+        variants: true,
+        category: true,
+      },
+      orderBy: [desc(products.createdAt)],
+      limit: filters?.limit || 10,
+      offset: filters?.offset || 0,
+    }),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(products)
+      .where(whereCondition)
+      .then((res) => Number(res[0]?.count || 0)),
+  ]);
+
+  return {
+    data,
+    totalRecords: total,
+  };
 }
 
 export async function getProductById(id: string) {
@@ -63,6 +81,7 @@ export async function createProduct(data: {
   name: string;
   brand: string;
   categoryId: string;
+  supplierId?: string;
   description?: string;
   basePrice: number;
   baseCost: number;
@@ -77,6 +96,7 @@ export async function createProduct(data: {
     sellPrice: number;
   }[];
 }) {
+  await requireRole("manager", "owner");
   const productId = crypto.randomUUID();
 
   await db.insert(products).values({
@@ -84,6 +104,7 @@ export async function createProduct(data: {
     name: data.name,
     brand: data.brand,
     categoryId: data.categoryId,
+    supplierId: data.supplierId || null,
     description: data.description || "",
     basePrice: data.basePrice,
     baseCost: data.baseCost,
@@ -108,6 +129,16 @@ export async function createProduct(data: {
 
   revalidatePath("/produk");
   revalidatePath("/pos");
+
+  const currentUser = await getCurrentUser();
+  createAuditLog({
+    userId: currentUser?.id,
+    userName: currentUser?.name || "Unknown",
+    action: "produk",
+    detail: `Produk baru ditambahkan: ${data.name}`,
+    metadata: { productId, name: data.name },
+  }).catch(() => { });
+
   return productId;
 }
 
@@ -117,12 +148,14 @@ export async function updateProduct(
     name: string;
     brand: string;
     categoryId: string;
+    supplierId: string;
     description: string;
     basePrice: number;
     baseCost: number;
     status: "aktif" | "nonaktif";
   }>
 ) {
+  await requireRole("manager", "owner");
   await db
     .update(products)
     .set({ ...data, updatedAt: new Date() })
@@ -130,6 +163,15 @@ export async function updateProduct(
 
   revalidatePath("/produk");
   revalidatePath("/pos");
+
+  const currentUser2 = await getCurrentUser();
+  createAuditLog({
+    userId: currentUser2?.id,
+    userName: currentUser2?.name || "Unknown",
+    action: "produk",
+    detail: `Produk ${id} diperbarui`,
+    metadata: { productId: id },
+  }).catch(() => { });
 }
 
 export async function adjustStock(
@@ -137,6 +179,7 @@ export async function adjustStock(
   quantity: number,
   _reason: string
 ) {
+  await requireRole("manager", "owner");
   await db
     .update(productVariants)
     .set({
@@ -147,9 +190,19 @@ export async function adjustStock(
   revalidatePath("/inventaris");
   revalidatePath("/pos");
   revalidatePath("/produk");
+
+  const currentUser3 = await getCurrentUser();
+  createAuditLog({
+    userId: currentUser3?.id,
+    userName: currentUser3?.name || "Unknown",
+    action: "stok",
+    detail: `Stok diubah untuk varian ${variantId}: ${quantity > 0 ? "+" : ""}${quantity} `,
+    metadata: { variantId, quantity, reason: _reason },
+  }).catch(() => { });
 }
 
 export async function createCategory(data: { name: string; description?: string }) {
+  await requireRole("manager", "owner");
   const id = crypto.randomUUID();
   const slug = data.name
     .toLowerCase()
@@ -167,6 +220,7 @@ export async function createCategory(data: { name: string; description?: string 
 }
 
 export async function updateCategory(id: string, data: Partial<{ name: string; description: string }>) {
+  await requireRole("manager", "owner");
   const updateData: Record<string, unknown> = { ...data };
   if (data.name) {
     updateData.slug = data.name
@@ -180,6 +234,7 @@ export async function updateCategory(id: string, data: Partial<{ name: string; d
 }
 
 export async function deleteCategory(id: string) {
+  await requireRole("manager", "owner");
   await db.delete(categories).where(eq(categories.id, id));
   revalidatePath("/kategori");
   revalidatePath("/produk");
@@ -202,6 +257,7 @@ export async function getAllVariantsFlat() {
       productName: products.name,
       brand: products.brand,
       categoryName: categories.name,
+      supplierId: products.supplierId,
     })
     .from(productVariants)
     .innerJoin(products, eq(productVariants.productId, products.id))

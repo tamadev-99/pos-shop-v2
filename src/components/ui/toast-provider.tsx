@@ -16,7 +16,7 @@ export function ToastProvider() {
           fontSize: "13px",
         },
         classNames: {
-          success: "!border-emerald-500/20",
+          success: "!border-accent-500/20",
           error: "!border-rose-500/20",
           warning: "!border-amber-500/20",
         },

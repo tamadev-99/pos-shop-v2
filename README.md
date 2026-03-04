@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# KasirPro (POS v2)
 
-## Getting Started
+KasirPro is a modern, full-featured Point of Sale (POS) and inventory management system built with Next.js 16, React 19, Tailwind CSS v4, and Drizzle ORM. Designed for businesses to efficiently manage sales, inventory, employees, and customer relationships.
 
-First, run the development server:
+## 🚀 Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### Core POS
+- **Cashier Interface**: Fast, keyboard/barcode scanner optimized checkout flow.
+- **Multiple Payment Methods**: Cash (Tunai), E-Wallet, QRIS, Debit, Credit, and Bank Transfer.
+- **Held Transactions**: Temporarily hold customer orders (Save/Restore carts).
+- **Shift Management**: Track opening/closing balances and calculate expected versus actual cash drawers per cashier shift.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Receipt & Printing
+- **Thermal Printer Support**: Print receipts directly to USB/Bluetooth thermal printers using Web Bluetooth API.
+- **WhatsApp Digital Receipts**: Instantly send beautifully formatted digital receipts to customers via WhatsApp.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Inventory & Products
+- **Product Management**: Support for product variants (Color, Size), categories, and brands.
+- **Stock Tracking**: Real-time stock decrements and low-stock alerts.
+- **Suppliers & Purchasing**: Manage supplier data, track purchase history, and handle incoming stock.
+- **Returns (Retur)**: Process customer returns smoothly.
+- **Barcode Scanning**: Built-in support for scanning items via webcam or external barcode scanners using `html5-qrcode`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Customers & CRM
+- **Customer Database**: Maintain customer profiles and purchase history.
+- **Loyalty Points**: Customers earn points from transactions that can be redeemed for discounts later.
 
-## Learn More
+### Backoffice & Reporting
+- **Employee Management**: Role-based access control (Admin, Cashier, Manager).
+- **Dashboard & Analytics**: Real-time sales charts, revenue metrics, and top-selling products using `recharts`.
+- **Audit Logs**: System-wide logging of sensitive actions for security and accountability.
 
-To learn more about Next.js, take a look at the following resources:
+## 💻 Tech Stack
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Framework**: [Next.js 16](https://nextjs.org/) (App Router)
+- **UI Library**: [React 19](https://react.dev/)
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **Database ORM**: [Drizzle ORM](https://orm.drizzle.team/)
+- **Database Engine**: PostgreSQL
+- **Authentication**: [Better Auth](https://better-auth.com/)
+- **Icons**: [Lucide React](https://lucide.dev/)
+- **Notifications**: [Sonner](https://sonner.emilkowal.ski/)
+- **Validation**: [Zod](https://zod.dev/)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🛠️ Getting Started
 
-## Deploy on Vercel
+### Prerequisites
+- Node.js (v20+)
+- PostgreSQL database
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Installation
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Clone the repository and install dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Configure environment variables in `.env`:
+   ```env
+   DATABASE_URL="postgres://username:password@host:port/database"
+   BETTER_AUTH_SECRET="your-secret-key"
+   ```
+
+3. Setup the database schema:
+   ```bash
+   npm run db:generate
+   npm run db:push
+   ```
+
+4. (Optional) Seed the database with initial mock data:
+   ```bash
+   npm run db:seed
+   ```
+
+5. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+## 📜 Available Scripts
+
+- `npm run dev` - Starts the Next.js development server.
+- `npm run build` - Builds the application for production.
+- `npm run start` - Starts the production server.
+- `npm run db:generate` - Generates Drizzle migrations.
+- `npm run db:push` - Pushes schema changes directly to the database.
+- `npm run db:studio` - Opens Drizzle Studio to inspect database tables and records visually.
+- `npm run db:seed` - Seeds the database with default data.
+
+## 📄 License
+Private and Confidential.

@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { financialTransactions, orders, orderItems } from "@/db/schema";
+import { financialTransactions, orders, orderItems, dailyReconciliations } from "@/db/schema";
 import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -69,6 +69,56 @@ export async function getDailyReconciliation(date: string) {
     net: income - expense,
     transactions: dayTransactions,
   };
+}
+
+export async function getReconciliationLog(date: string) {
+  const log = await db
+    .select()
+    .from(dailyReconciliations)
+    .where(eq(dailyReconciliations.date, date))
+    .limit(1);
+
+  return log.length > 0 ? log[0] : null;
+}
+
+export async function saveDailyReconciliation(data: {
+  date: string;
+  calculatedIncome: number;
+  calculatedExpense: number;
+  actualCashInHand: number;
+  notes?: string;
+  reconciledBy: string;
+}) {
+  const difference = data.actualCashInHand - (data.calculatedIncome - data.calculatedExpense);
+
+  // Check if reconciliation already exists for the day
+  const existing = await getReconciliationLog(data.date);
+
+  if (existing) {
+    await db.update(dailyReconciliations).set({
+      calculatedIncome: data.calculatedIncome,
+      calculatedExpense: data.calculatedExpense,
+      actualCashInHand: data.actualCashInHand,
+      difference,
+      notes: data.notes || null,
+      status: "completed",
+      reconciledBy: data.reconciledBy,
+      updatedAt: new Date()
+    }).where(eq(dailyReconciliations.id, existing.id));
+  } else {
+    await db.insert(dailyReconciliations).values({
+      date: data.date,
+      calculatedIncome: data.calculatedIncome,
+      calculatedExpense: data.calculatedExpense,
+      actualCashInHand: data.actualCashInHand,
+      difference,
+      notes: data.notes || null,
+      status: "completed",
+      reconciledBy: data.reconciledBy
+    });
+  }
+
+  revalidatePath("/laporan");
 }
 
 export async function getProfitLossReport(startDate: string, endDate: string) {

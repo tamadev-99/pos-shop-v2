@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
-import { formatRupiah, formatNumber } from "@/lib/utils";
+import { cn, formatRupiah, formatNumber } from "@/lib/utils";
 import {
   Clock,
   Play,
@@ -20,9 +21,10 @@ import {
   DollarSign,
   User,
 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { toast } from "sonner";
-import { openShift, closeShift } from "@/lib/actions/shifts";
+import { openShift, closeShift, getShiftHistory } from "@/lib/actions/shifts";
+import { useAuth } from "@/components/providers/auth-provider";
 
 interface ShiftData {
   id: string;
@@ -35,6 +37,8 @@ interface ShiftData {
   actualClosing: number | null;
   difference: number | null;
   totalSales: number | null;
+  totalCashSales: number | null;
+  totalNonCashSales: number | null;
   totalTransactions: number | null;
   status: "active" | "closed";
   notes: string | null;
@@ -43,23 +47,57 @@ interface ShiftData {
 interface Props {
   initialActiveShifts: ShiftData[];
   initialShiftHistory: ShiftData[];
+  totalShifts: number;
   users: { id: string; name: string }[];
 }
 
-export default function ShiftClient({ initialActiveShifts, initialShiftHistory, users }: Props) {
+export default function ShiftClient({ initialActiveShifts, initialShiftHistory, totalShifts, users }: Props) {
+  const { user } = useAuth();
+
   const [openShiftDialog, setOpenShiftDialog] = useState(false);
   const [closeShiftDialog, setCloseShiftDialog] = useState(false);
   const [actualBalance, setActualBalance] = useState("");
   const [openingBalanceInput, setOpeningBalanceInput] = useState("500000");
-  const [selectedCashier, setSelectedCashier] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
   const [openNotes, setOpenNotes] = useState("");
+  const [search, setSearch] = useState("");
+  const router = useRouter();
+
+  // Pagination state
+  const [shiftHistory, setShiftHistory] = useState<ShiftData[]>(initialShiftHistory);
+
+  // Sync state when props change from router.refresh()
+  useEffect(() => {
+    setShiftHistory(initialShiftHistory);
+  }, [initialShiftHistory]);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const hasMorePages = shiftHistory.length < totalShifts;
+
+  const loadMoreShifts = async () => {
+    setLoadingMore(true);
+    try {
+      const nextPage = currentPage + 1;
+      const result = await getShiftHistory(nextPage, 20);
+      setShiftHistory((prev) => [...prev, ...result.data]);
+      setCurrentPage(nextPage);
+    } catch {
+      toast.error("Gagal memuat data shift");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const [isPending, startTransition] = useTransition();
 
-  const activeShift = initialActiveShifts[0];
+  // Find shift for current user. Fallback to first if user not loaded yet to prevent UI shift if they are the only one.
+  const activeShift = user
+    ? initialActiveShifts.find((s) => s.cashierId === user.id)
+    : initialActiveShifts[0];
 
-  const estimatedCashIn = activeShift?.totalSales || 0;
+  const estimatedCashIn = activeShift?.totalCashSales || 0;
+  const estimatedNonCashIn = activeShift?.totalNonCashSales || 0;
   const estimatedExpected = activeShift
     ? activeShift.openingBalance + estimatedCashIn
     : 0;
@@ -67,13 +105,22 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
     ? Number(actualBalance) - estimatedExpected
     : 0;
 
+  // Check if active shift is from a previous day
+  const isPreviousDayShift = (() => {
+    if (!activeShift) return false;
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return new Date(activeShift.openedAt) < startOfToday;
+  })();
+
   const cashierOptions = users.map(u => ({ label: u.name, value: u.id }));
 
   const handleOpenShift = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCashier || !openingBalanceInput) return;
+    const cashierId = user?.id;
+    if (!cashierId || !openingBalanceInput) return;
     startTransition(async () => {
-      const res = await openShift(selectedCashier, Number(openingBalanceInput));
+      const res = await openShift(cashierId, Number(openingBalanceInput));
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -82,7 +129,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
       setOpenShiftDialog(false);
       setOpeningBalanceInput("500000");
       setOpenNotes("");
-      setSelectedCashier("");
+      router.refresh();
     });
   };
 
@@ -95,6 +142,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
       setCloseShiftDialog(false);
       setActualBalance("");
       setCloseNotes("");
+      router.refresh();
     });
   };
 
@@ -135,44 +183,50 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
             </Button>
           )}
           {activeShift && (
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => setOpenShiftDialog(true)}
-              >
-                <Play size={15} />
-                Buka Shift Baru
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => setCloseShiftDialog(true)}
-              >
-                <Square size={15} />
-                Tutup Shift
-              </Button>
-            </>
+            <Button
+              variant="destructive"
+              onClick={() => setCloseShiftDialog(true)}
+            >
+              <Square size={15} />
+              Tutup Shift
+            </Button>
           )}
         </div>
       </div>
 
       {/* Active Shift Status Card */}
       <Card
-        className="p-4 md:p-5 animate-fade-up"
+        className={cn(
+          "p-4 md:p-5 animate-fade-up",
+          isPreviousDayShift && activeShift ? "border-amber-500/50 shadow-[0_0_30px_-5px_rgba(245,158,11,0.3)] bg-amber-500/5" : ""
+        )}
         hover
-        glow={activeShift ? "success" : undefined}
         style={{ animationDelay: "60ms" }}
       >
         {activeShift ? (
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center shadow-[0_0_16px_-4px_rgba(16,185,129,0.25)]">
-              <Clock size={22} className="text-emerald-400" />
+            <div className={cn(
+              "w-12 h-12 rounded-xl flex items-center justify-center",
+              isPreviousDayShift
+                ? "bg-gradient-to-br from-amber-500/20 to-orange-500/20 shadow-[0_0_16px_-4px_rgba(245,158,11,0.25)]"
+                : "bg-gradient-to-br from-violet-500/20 to-cyan-500/20 shadow-[0_0_16px_-4px_rgba(16,185,129,0.25)]"
+            )}>
+              {isPreviousDayShift ? (
+                <AlertTriangle size={22} className="text-amber-400" />
+              ) : (
+                <Clock size={22} className="text-accent" />
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold text-foreground">
-                  Shift Aktif
+                  {isPreviousDayShift ? "Shift Belum Ditutup (Kemarin)" : "Shift Aktif"}
                 </h3>
-                <Badge variant="success">Berjalan</Badge>
+                {isPreviousDayShift ? (
+                  <Badge variant="destructive" className="bg-amber-500/20 text-amber-500 hover:bg-amber-500/30 border-amber-500/30">Harus Ditutup</Badge>
+                ) : (
+                  <Badge variant="success">Berjalan</Badge>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Kasir:{" "}
@@ -206,6 +260,14 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
                   </p>
                 </div>
               </div>
+              {isPreviousDayShift && (
+                <div className="mt-4 p-3 rounded-lg border border-amber-500/20 bg-amber-500/10 flex items-start gap-3">
+                  <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                    Terdapat shift dari hari sebelumnya yang belum ditutup. Harap tutup shift ini untuk memulai transaksi di hari yang baru.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -221,10 +283,6 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
                 Buka shift terlebih dahulu untuk memulai transaksi kasir
               </p>
             </div>
-            <Button onClick={() => setOpenShiftDialog(true)}>
-              <Play size={15} />
-              Buka Shift
-            </Button>
           </div>
         )}
       </Card>
@@ -244,7 +302,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
               Total Shift
             </p>
             <p className="text-lg md:text-xl font-bold font-num text-foreground">
-              {formatNumber(initialShiftHistory.length)}
+              {formatNumber(totalShifts)}
             </p>
           </div>
         </Card>
@@ -252,11 +310,10 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
         <Card
           className="p-3 md:p-4 flex items-center gap-3 animate-fade-up"
           hover
-          glow="success"
           style={{ animationDelay: "180ms" }}
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center shadow-[0_0_16px_-4px_rgba(16,185,129,0.25)]">
-            <DollarSign size={18} className="text-emerald-400" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-cyan-500/20 flex items-center justify-center shadow-[0_0_16px_-4px_rgba(16,185,129,0.25)]">
+            <DollarSign size={18} className="text-accent" />
           </div>
           <div>
             <p className="text-[10px] md:text-[11px] text-muted-foreground uppercase tracking-wider">
@@ -264,7 +321,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
             </p>
             <p className="text-lg md:text-xl font-bold font-num text-foreground">
               {formatNumber(
-                initialShiftHistory.filter(
+                shiftHistory.filter(
                   (s) => s.status === "closed" && s.difference === 0
                 ).length
               )}
@@ -275,7 +332,6 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
         <Card
           className="p-3 md:p-4 flex items-center gap-3 animate-fade-up"
           hover
-          glow="warning"
           style={{ animationDelay: "240ms" }}
         >
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center shadow-[0_0_16px_-4px_rgba(245,158,11,0.25)]">
@@ -287,7 +343,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
             </p>
             <p className="text-lg md:text-xl font-bold font-num text-foreground">
               {formatNumber(
-                initialShiftHistory.filter(
+                shiftHistory.filter(
                   (s) => s.status === "closed" && !!s.difference && s.difference < 0
                 ).length
               )}
@@ -298,7 +354,6 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
         <Card
           className="p-3 md:p-4 flex items-center gap-3 animate-fade-up"
           hover
-          glow="accent"
           style={{ animationDelay: "300ms" }}
         >
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-sky-500/20 flex items-center justify-center shadow-[0_0_16px_-4px_rgba(59,130,246,0.25)]">
@@ -310,7 +365,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
             </p>
             <p className="text-lg md:text-xl font-bold font-num text-foreground">
               {formatNumber(
-                new Set(initialShiftHistory.map((s) => s.cashierId)).size
+                new Set(shiftHistory.map((s) => s.cashierId)).size
               )}
             </p>
           </div>
@@ -322,7 +377,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
         className="overflow-hidden animate-fade-up"
         style={{ animationDelay: "360ms" }}
       >
-        <div className="px-4 py-3 border-b border-white/[0.06]">
+        <div className="px-4 py-3 border-b border-border">
           <h2 className="text-sm font-semibold text-foreground font-[family-name:var(--font-display)]">
             Riwayat Shift
           </h2>
@@ -330,7 +385,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+              <tr className="border-b border-border bg-surface">
                 <th className="px-3 md:px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">
                   Tanggal
                 </th>
@@ -358,17 +413,17 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
               </tr>
             </thead>
             <tbody>
-              {initialShiftHistory.map((shift) => (
+              {shiftHistory.map((shift) => (
                 <tr
                   key={shift.id}
-                  className="border-b border-white/[0.04] hover:bg-white/[0.025] transition-all duration-300"
+                  className="border-b border-border hover:bg-white/[0.025] transition-all duration-300"
                 >
                   <td className="px-3 md:px-4 py-3 text-xs font-num text-foreground">
                     {formatDate(shift.openedAt)}
                   </td>
                   <td className="px-3 md:px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-white/[0.06] to-white/[0.02] flex items-center justify-center shrink-0 border border-white/[0.04]">
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-white/[0.06] to-white/[0.02] flex items-center justify-center shrink-0 border border-border">
                         <User size={12} className="text-muted-dim" />
                       </div>
                       <span className="text-xs font-medium text-foreground">
@@ -396,10 +451,10 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
                     ) : (
                       <span
                         className={`text-xs font-bold font-num ${shift.difference > 0
-                            ? "text-emerald-400"
-                            : shift.difference < 0
-                              ? "text-red-400"
-                              : "text-muted-foreground"
+                          ? "text-accent"
+                          : shift.difference < 0
+                            ? "text-red-400"
+                            : "text-muted-foreground"
                           }`}
                       >
                         {shift.difference > 0 ? "+" : ""}
@@ -423,6 +478,20 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
         </div>
       </Card>
 
+      {/* Load More Pagination */}
+      {hasMorePages && (
+        <div className="flex justify-center animate-fade-up">
+          <Button
+            variant="ghost"
+            onClick={loadMoreShifts}
+            disabled={loadingMore}
+            className="text-xs"
+          >
+            {loadingMore ? "Memuat..." : `Muat Lebih Banyak (${shiftHistory.length} dari ${totalShifts})`}
+          </Button>
+        </div>
+      )}
+
       {/* Open Shift Dialog */}
       <Dialog
         open={openShiftDialog}
@@ -439,12 +508,10 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
             <label className="text-xs font-medium text-muted-foreground">
               Kasir
             </label>
-            <Select
-              placeholder="Pilih kasir"
-              options={cashierOptions}
-              value={selectedCashier}
-              onChange={(e) => setSelectedCashier(e.target.value)}
-            />
+            <Input disabled value={user?.name || "Memuat..."} />
+            <p className="text-[10px] text-muted-dim">
+              Shift akan dibuka untuk akun Anda saat ini
+            </p>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">
@@ -478,7 +545,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
             >
               Batal
             </Button>
-            <Button type="submit" disabled={isPending || !selectedCashier || !openingBalanceInput}>
+            <Button type="submit" disabled={isPending || !user?.id || !openingBalanceInput}>
               <Play size={14} />
               Buka Shift
             </Button>
@@ -499,12 +566,21 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
 
         {activeShift && (
           <form onSubmit={handleCloseShift} className="space-y-4">
+            {isPreviousDayShift && (
+              <div className="mb-4 p-3 rounded-xl border border-amber-500/20 bg-amber-500/10 flex items-start gap-3">
+                <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-200/90 leading-relaxed">
+                  <strong>Peringatan:</strong> Anda sedang menutup shift dari hari sebelumnya. Pastikan nominal akhir sesuai dengan uang di laci kemarin.
+                </p>
+              </div>
+            )}
+
             {/* Shift Summary */}
-            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4 space-y-3">
+            <div className="rounded-xl bg-surface border border-border p-4 space-y-3">
               <p className="text-xs font-medium text-muted-foreground">
                 Ringkasan Shift
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div>
                   <p className="text-[10px] text-muted-dim uppercase tracking-wider">
                     Kasir
@@ -529,20 +605,58 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
                     {formatRupiah(activeShift.openingBalance)}
                   </p>
                 </div>
+
+                <div className="col-span-2 md:col-span-3 border-t border-border pt-2 mt-1" />
+
                 <div>
                   <p className="text-[10px] text-muted-dim uppercase tracking-wider">
-                    Estimasi Kas Masuk
+                    Total Transaksi
                   </p>
-                  <p className="text-xs font-bold font-num text-emerald-400 mt-0.5">
+                  <p className="text-xs font-bold font-num text-foreground mt-0.5">
+                    {formatNumber(activeShift.totalTransactions || 0)} transaksi
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-dim uppercase tracking-wider">
+                    Total Semua Penjualan
+                  </p>
+                  <p className="text-xs font-bold font-num text-foreground mt-0.5">
+                    {formatRupiah((activeShift.totalSales || 0))}
+                  </p>
+                </div>
+
+                <div className="col-span-2 md:col-span-3 border-t border-border pt-2 mt-1" />
+
+                <div>
+                  <p className="text-[10px] text-muted-dim uppercase tracking-wider">
+                    Penjualan Tunai (Cash)
+                  </p>
+                  <p className="text-xs font-bold font-num text-accent mt-0.5">
                     +{formatRupiah(estimatedCashIn)}
                   </p>
                 </div>
-              </div>
-              <div className="pt-2 border-t border-white/[0.06]">
-                <div className="flex items-center justify-between">
+                <div>
                   <p className="text-[10px] text-muted-dim uppercase tracking-wider">
-                    Saldo Diharapkan
+                    Penjualan Non-Tunai
                   </p>
+                  <p className="text-xs font-medium font-num text-blue-400 mt-0.5">
+                    {formatRupiah(estimatedNonCashIn)}
+                  </p>
+                  <p className="text-[9px] text-muted-dim mt-0.5">
+                    (Debit/QRIS/Transfer — tidak di laci)
+                  </p>
+                </div>
+              </div>
+              <div className="pt-3 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-muted-dim uppercase tracking-wider">
+                      Saldo Diharapkan (di Laci)
+                    </p>
+                    <p className="text-[9px] text-muted-dim mt-0.5">
+                      = Saldo Awal + Tunai
+                    </p>
+                  </div>
                   <p className="text-sm font-bold font-num text-foreground">
                     {formatRupiah(estimatedExpected)}
                   </p>
@@ -552,25 +666,28 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">
-                Saldo Aktual
+                Saldo Aktual (Uang Tunai di Laci)
               </label>
               <Input
                 type="number"
-                placeholder="Masukkan jumlah uang di laci"
+                placeholder="Hitung uang tunai di laci kasir"
                 value={actualBalance}
                 onChange={(e) => setActualBalance(e.target.value)}
               />
+              <p className="text-[10px] text-muted-dim">
+                Hanya hitung uang tunai (cash) di laci, tidak termasuk pembayaran debit/QRIS/transfer
+              </p>
             </div>
 
             {/* Auto-calculated difference */}
             {actualBalance && (
-              <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3">
+              <div className="rounded-xl bg-surface border border-border p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-medium text-muted-foreground">
                     Selisih
                   </p>
                   <p
-                    className={`text-sm font-bold font-num ${selisih >= 0 ? "text-emerald-400" : "text-red-400"
+                    className={`text-sm font-bold font-num ${selisih >= 0 ? "text-accent" : "text-red-400"
                       }`}
                   >
                     {selisih > 0 ? "+" : ""}

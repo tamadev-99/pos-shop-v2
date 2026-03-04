@@ -2,6 +2,8 @@ import { StatsCards } from "@/components/dashboard/stats-cards";
 import { SalesChart } from "@/components/dashboard/sales-chart";
 import { RecentOrders } from "@/components/dashboard/recent-orders";
 import { TopProducts } from "@/components/dashboard/top-products";
+import { PaymentBreakdown } from "@/components/dashboard/payment-breakdown";
+import { LowStockWarning } from "@/components/dashboard/low-stock-warning";
 import { getDashboardStats, getBestSellers } from "@/lib/actions/reports";
 import { getOrders } from "@/lib/actions/orders";
 
@@ -21,9 +23,7 @@ export default async function DashboardPage() {
   }));
 
   // Format recent orders into the shape expected by RecentOrders
-  const mappedRecentOrders = recentOrdersData.map((order) => {
-    // Attempt to format a time from the Date.
-    // If it's a timezone string, create a new Date.
+  const mappedRecentOrders = recentOrdersData.data.map((order) => {
     const createdDate = new Date(order.createdAt);
     const timeString = createdDate.toLocaleTimeString("id-ID", {
       hour: "2-digit",
@@ -54,6 +54,13 @@ export default async function DashboardPage() {
       {/* Stats */}
       <StatsCards stats={stats} />
 
+      {/* Low Stock Warning */}
+      {stats.lowStockItems && stats.lowStockItems.length > 0 && (
+        <div className="animate-fade-up">
+          <LowStockWarning items={stats.lowStockItems} />
+        </div>
+      )}
+
       {/* Charts + Tables */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6 stagger">
         <div className="lg:col-span-3 animate-fade-up">
@@ -64,9 +71,14 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Orders */}
-      <div className="animate-fade-up" style={{ animationDelay: "300ms" }}>
-        <RecentOrders orders={mappedRecentOrders} />
+      {/* Payment Breakdown + Recent Orders */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6 stagger">
+        <div className="lg:col-span-2 animate-fade-up">
+          <PaymentBreakdown data={stats.paymentBreakdown || {}} />
+        </div>
+        <div className="lg:col-span-3 animate-fade-up">
+          <RecentOrders orders={mappedRecentOrders} />
+        </div>
       </div>
     </div>
   );

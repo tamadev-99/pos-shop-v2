@@ -101,13 +101,13 @@ function Tag({ label, active, onToggle, onRemove, isCustom }: TagProps) {
         "leading-none whitespace-nowrap",
         active
           ? [
-            "bg-gradient-to-r from-accent/20 to-accent-secondary/15",
+            "bg-gradient-to-r from-accent/20 to-accent-hover/15",
             "border-accent/30 text-accent",
             "shadow-[0_0_12px_-4px_rgba(16,185,129,0.3),inset_0_1px_0_rgba(16,185,129,0.15)]",
           ].join(" ")
           : [
-            "bg-white/[0.04] border-white/[0.06] text-muted-foreground",
-            "hover:bg-white/[0.07] hover:border-white/[0.1] hover:text-foreground",
+            "bg-card border-border text-muted-foreground",
+            "hover:bg-white/[0.07] hover:border-border-strong hover:text-foreground",
           ].join(" ")
       )}
       onClick={onToggle}
@@ -159,8 +159,8 @@ function AddCustomTag({ placeholder, onAdd }: AddCustomTagProps) {
         onClick={() => setOpen(true)}
         className={cn(
           "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium",
-          "border border-dashed border-white/[0.1] text-muted-dim",
-          "hover:border-white/[0.18] hover:text-muted-foreground hover:bg-white/[0.04]",
+          "border border-dashed border-border-strong text-muted-dim",
+          "hover:border-white/[0.18] hover:text-muted-foreground hover:bg-card",
           "transition-all duration-200 leading-none cursor-pointer"
         )}
       >
@@ -189,7 +189,7 @@ function AddCustomTag({ placeholder, onAdd }: AddCustomTagProps) {
         placeholder={placeholder}
         className={cn(
           "h-6 w-24 px-2 rounded-lg text-[11px] text-foreground",
-          "bg-white/[0.06] border border-accent/30",
+          "bg-surface border border-accent/30",
           "placeholder:text-muted-dim",
           "focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20",
           "transition-all duration-200"
@@ -226,7 +226,7 @@ interface VariantTableRowProps {
 
 function VariantTableRow({ row, index, onChange }: VariantTableRowProps) {
   return (
-    <tr className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors duration-150 group">
+    <tr className="border-b border-border hover:bg-surface transition-colors duration-150 group">
       {/* Color dot + label */}
       <td className="px-3 py-2.5">
         <span className="text-xs font-medium text-foreground">{row.color}</span>
@@ -237,7 +237,7 @@ function VariantTableRow({ row, index, onChange }: VariantTableRowProps) {
         <span
           className={cn(
             "inline-block px-2 py-0.5 rounded-md text-[11px] font-medium",
-            "bg-white/[0.05] border border-white/[0.06] text-muted-foreground"
+            "bg-surface border border-border text-muted-foreground"
           )}
         >
           {row.size}
@@ -251,10 +251,10 @@ function VariantTableRow({ row, index, onChange }: VariantTableRowProps) {
           onChange={(e) => onChange(index, "sku", e.target.value)}
           className={cn(
             "w-full h-7 px-2 rounded-lg text-[11px] font-num text-foreground",
-            "bg-white/[0.04] border border-white/[0.06]",
+            "bg-card border border-border",
             "placeholder:text-muted-dim",
             "focus:outline-none focus:border-accent/30 focus:ring-1 focus:ring-accent/15",
-            "focus:bg-white/[0.06] transition-all duration-200"
+            "focus:bg-surface transition-all duration-200"
           )}
         />
       </td>
@@ -268,9 +268,9 @@ function VariantTableRow({ row, index, onChange }: VariantTableRowProps) {
           onChange={(e) => onChange(index, "stock", parseInt(e.target.value) || 0)}
           className={cn(
             "w-20 h-7 px-2 rounded-lg text-[11px] font-num text-foreground text-right",
-            "bg-white/[0.04] border border-white/[0.06]",
+            "bg-card border border-border",
             "focus:outline-none focus:border-accent/30 focus:ring-1 focus:ring-accent/15",
-            "focus:bg-white/[0.06] transition-all duration-200"
+            "focus:bg-surface transition-all duration-200"
           )}
         />
       </td>
@@ -288,9 +288,9 @@ function VariantTableRow({ row, index, onChange }: VariantTableRowProps) {
             onChange={(e) => onChange(index, "buyPrice", parseInt(e.target.value) || 0)}
             className={cn(
               "w-full h-7 pl-7 pr-2 rounded-lg text-[11px] font-num text-foreground text-right",
-              "bg-white/[0.04] border border-white/[0.06]",
+              "bg-card border border-border",
               "focus:outline-none focus:border-accent/30 focus:ring-1 focus:ring-accent/15",
-              "focus:bg-white/[0.06] transition-all duration-200"
+              "focus:bg-surface transition-all duration-200"
             )}
           />
         </div>
@@ -309,9 +309,9 @@ function VariantTableRow({ row, index, onChange }: VariantTableRowProps) {
             onChange={(e) => onChange(index, "sellPrice", parseInt(e.target.value) || 0)}
             className={cn(
               "w-full h-7 pl-7 pr-2 rounded-lg text-[11px] font-num text-foreground text-right",
-              "bg-white/[0.04] border border-white/[0.06]",
+              "bg-card border border-border",
               "focus:outline-none focus:border-accent/30 focus:ring-1 focus:ring-accent/15",
-              "focus:bg-white/[0.06] transition-all duration-200"
+              "focus:bg-surface transition-all duration-200"
             )}
           />
         </div>
@@ -470,8 +470,8 @@ export function VariantBuilder({
       {/* ── Color Picker ── */}
       <div
         className={cn(
-          "rounded-2xl border border-white/[0.06]",
-          "bg-white/[0.02] backdrop-blur-sm",
+          "rounded-2xl border border-border",
+          "bg-surface backdrop-blur-sm",
           "shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
           "p-4 space-y-3"
         )}
@@ -513,8 +513,8 @@ export function VariantBuilder({
       {/* ── Size Picker ── */}
       <div
         className={cn(
-          "rounded-2xl border border-white/[0.06]",
-          "bg-white/[0.02] backdrop-blur-sm",
+          "rounded-2xl border border-border",
+          "bg-surface backdrop-blur-sm",
           "shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
           "p-4 space-y-3"
         )}
@@ -549,13 +549,13 @@ export function VariantBuilder({
                   "border transition-all duration-200 cursor-pointer select-none leading-none",
                   isActive
                     ? [
-                      "bg-gradient-to-r from-accent-secondary/20 to-accent-tertiary/15",
-                      "border-accent-secondary/30 text-accent-secondary",
+                      "bg-gradient-to-r from-accent-hover/20 to-accent-light/15",
+                      "border-accent-hover/30 text-accent-hover",
                       "shadow-[0_0_10px_-4px_rgba(6,182,212,0.3)]",
                     ].join(" ")
                     : [
-                      "bg-white/[0.03] border-white/[0.08] text-muted-dim",
-                      "hover:bg-white/[0.06] hover:border-white/[0.12] hover:text-muted-foreground",
+                      "bg-surface border-border text-muted-dim",
+                      "hover:bg-surface hover:border-border-strong hover:text-muted-foreground",
                     ].join(" ")
                 )}
               >
@@ -598,13 +598,13 @@ export function VariantBuilder({
       {matrix.length > 0 ? (
         <div
           className={cn(
-            "rounded-2xl border border-white/[0.06] overflow-hidden",
+            "rounded-2xl border border-border overflow-hidden",
             "bg-white/[0.015] backdrop-blur-sm",
             "shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
           )}
         >
           {/* Header */}
-          <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between bg-white/[0.02]">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-surface">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Varian ({matrix.length})
             </p>
@@ -617,7 +617,7 @@ export function VariantBuilder({
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                <tr className="border-b border-border bg-surface">
                   {["Warna", "Ukuran", "SKU", "Stok", "H. Beli", "H. Jual"].map(
                     (heading) => (
                       <th
@@ -647,7 +647,7 @@ export function VariantBuilder({
         /* Empty state */
         <div
           className={cn(
-            "rounded-2xl border border-dashed border-white/[0.08]",
+            "rounded-2xl border border-dashed border-border",
             "bg-white/[0.01] backdrop-blur-sm",
             "p-8 flex flex-col items-center justify-center gap-2 text-center"
           )}
@@ -655,7 +655,7 @@ export function VariantBuilder({
           <div
             className={cn(
               "w-10 h-10 rounded-2xl flex items-center justify-center mb-1",
-              "bg-white/[0.03] border border-white/[0.06]",
+              "bg-surface border border-border",
               "shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
             )}
           >

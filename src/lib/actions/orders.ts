@@ -8,20 +8,27 @@ import {
   customers,
   financialTransactions,
   heldTransactions,
+  shifts,
 } from "@/db/schema";
 import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { createAuditLog } from "@/lib/actions/audit";
+import { getCurrentUser } from "@/lib/actions/auth-helpers";
+import { checkLowStock } from "@/lib/actions/notifications";
 
-function generateOrderId() {
-  const now = new Date();
-  const date = now.toISOString().slice(2, 10).replace(/-/g, "");
-  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `ORD-${date}-${rand}`;
-}
 
-export async function createOrder(data: {
-  customerId?: string;
+export interface CreateOrderParams {
+  customerId?: string | null;
   customerName?: string;
+  subtotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  shippingFee: number;
+  total: number;
+  paymentMethod: "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewallet";
+  cashPaid?: number;
+  changeAmount?: number;
+  notes?: string;
   items: {
     variantId: string;
     productName: string;
@@ -30,18 +37,35 @@ export async function createOrder(data: {
     unitPrice: number;
     costPrice: number;
   }[];
-  subtotal: number;
-  discountAmount?: number;
-  taxAmount?: number;
-  shippingFee?: number;
-  total: number;
-  paymentMethod: "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewallet";
   cashierId?: string;
   shiftId?: string;
-  notes?: string;
-}) {
+}
+
+function generateOrderId() {
+  const now = new Date();
+  const date = now.toISOString().slice(2, 10).replace(/-/g, "");
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `ORD-${date}-${rand}`;
+}
+
+export async function createOrder(data: CreateOrderParams) {
   const orderId = generateOrderId();
   const today = new Date().toISOString().split("T")[0];
+
+  // Bug Fix #7: Validate stock before creating order
+  for (const item of data.items) {
+    const variant = await db
+      .select({ stock: productVariants.stock, sku: productVariants.sku })
+      .from(productVariants)
+      .where(eq(productVariants.id, item.variantId))
+      .limit(1);
+
+    if (!variant[0] || variant[0].stock < item.qty) {
+      throw new Error(
+        `Stok tidak cukup untuk ${item.productName} (${item.variantInfo}). Tersedia: ${variant[0]?.stock ?? 0}, Dibutuhkan: ${item.qty}`
+      );
+    }
+  }
 
   // Create order
   await db.insert(orders).values({
@@ -54,6 +78,8 @@ export async function createOrder(data: {
     shippingFee: data.shippingFee || 0,
     total: data.total,
     paymentMethod: data.paymentMethod,
+    cashPaid: data.cashPaid || null,
+    changeAmount: data.changeAmount || null,
     cashierId: data.cashierId || null,
     shiftId: data.shiftId || null,
     notes: data.notes || null,
@@ -106,39 +132,87 @@ export async function createOrder(data: {
     createdBy: data.cashierId || null,
   });
 
+  // Update active shift if any
+  if (data.shiftId) {
+    const isCash = data.paymentMethod === "tunai";
+
+    await db
+      .update(shifts)
+      .set({
+        totalSales: sql`${shifts.totalSales} + ${data.total}`,
+        totalCashSales: isCash
+          ? sql`${shifts.totalCashSales} + ${data.total}`
+          : sql`${shifts.totalCashSales}`,
+        totalNonCashSales: !isCash
+          ? sql`${shifts.totalNonCashSales} + ${data.total}`
+          : sql`${shifts.totalNonCashSales}`,
+        totalTransactions: sql`${shifts.totalTransactions} + 1`,
+      })
+      .where(eq(shifts.id, data.shiftId));
+  }
+
   revalidatePath("/");
   revalidatePath("/pos");
   revalidatePath("/pesanan");
   revalidatePath("/inventaris");
   revalidatePath("/pelanggan");
   revalidatePath("/keuangan");
+  revalidatePath("/shift");
+
+  // Audit log
+  const currentUser = await getCurrentUser();
+  createAuditLog({
+    userId: currentUser?.id,
+    userName: currentUser?.name || data.customerName || "Kasir",
+    action: "transaksi",
+    detail: `Pesanan baru ${orderId} — ${data.items.length} item, Total ${data.total}`,
+    metadata: { orderId, total: data.total, paymentMethod: data.paymentMethod },
+  }).catch(() => { });
+
+  // Auto-check low stock after sale
+  checkLowStock().catch(() => { });
 
   return orderId;
 }
 
-export async function getOrders(filters?: {
+export async function getOrders(filters: {
   status?: string;
   startDate?: string;
   endDate?: string;
   limit?: number;
-}) {
+  offset?: number;
+} = {}) {
   const conditions = [];
-  if (filters?.status) {
+  if (filters.status) {
     conditions.push(eq(orders.status, filters.status as "pending" | "selesai" | "dibatalkan"));
   }
-  if (filters?.startDate) {
+  if (filters.startDate) {
     conditions.push(gte(orders.date, new Date(filters.startDate)));
   }
-  if (filters?.endDate) {
+  if (filters.endDate) {
     conditions.push(lte(orders.date, new Date(filters.endDate)));
   }
 
-  return db.query.orders.findMany({
-    where: conditions.length > 0 ? and(...conditions) : undefined,
-    with: { items: true },
-    orderBy: [desc(orders.createdAt)],
-    limit: filters?.limit,
-  });
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [data, countResult] = await Promise.all([
+    db.query.orders.findMany({
+      where: whereClause,
+      with: { items: true },
+      orderBy: [desc(orders.createdAt)],
+      limit: filters.limit,
+      offset: filters.offset,
+    }),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(orders)
+      .where(whereClause)
+  ]);
+
+  return {
+    data,
+    totalRecords: Number(countResult[0]?.count || 0)
+  };
 }
 
 export async function getOrderById(id: string) {
@@ -166,12 +240,45 @@ export async function cancelOrder(id: string) {
     }
   }
 
+  // Bug Fix #1: Reverse shift sales if order was linked to a shift
+  if (order.shiftId) {
+    const isCash = order.paymentMethod === "tunai";
+    await db
+      .update(shifts)
+      .set({
+        totalSales: sql`GREATEST(${shifts.totalSales} - ${order.total}, 0)`,
+        totalCashSales: isCash
+          ? sql`GREATEST(${shifts.totalCashSales} - ${order.total}, 0)`
+          : sql`${shifts.totalCashSales}`,
+        totalNonCashSales: !isCash
+          ? sql`GREATEST(${shifts.totalNonCashSales} - ${order.total}, 0)`
+          : sql`${shifts.totalNonCashSales}`,
+        totalTransactions: sql`GREATEST(${shifts.totalTransactions} - 1, 0)`,
+      })
+      .where(eq(shifts.id, order.shiftId));
+  }
+
+  // Bug Fix #2: Delete the financial transaction for this order
+  await db
+    .delete(financialTransactions)
+    .where(eq(financialTransactions.orderId, id));
+
   // Update order status
   await db.update(orders).set({ status: "dibatalkan" }).where(eq(orders.id, id));
 
   revalidatePath("/pesanan");
   revalidatePath("/inventaris");
   revalidatePath("/keuangan");
+  revalidatePath("/shift");
+
+  const currentUser2 = await getCurrentUser();
+  createAuditLog({
+    userId: currentUser2?.id,
+    userName: currentUser2?.name || "Kasir",
+    action: "transaksi",
+    detail: `Pesanan ${id} dibatalkan`,
+    metadata: { orderId: id },
+  }).catch(() => { });
 }
 
 export async function holdTransaction(data: {
@@ -204,4 +311,13 @@ export async function getHeldTransactions() {
 export async function deleteHeldTransaction(id: string) {
   await db.delete(heldTransactions).where(eq(heldTransactions.id, id));
   revalidatePath("/pos");
+}
+
+export async function getOrdersByCustomerId(customerId: string) {
+  return db.query.orders.findMany({
+    where: eq(orders.customerId, customerId),
+    with: { items: true },
+    orderBy: [desc(orders.createdAt)],
+    limit: 20,
+  });
 }

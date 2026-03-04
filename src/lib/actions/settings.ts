@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { storeSettings, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/actions/auth-helpers";
 
 export async function getSettings() {
   const settings = await db.select().from(storeSettings);
@@ -24,6 +25,7 @@ export async function getSetting(key: string) {
 }
 
 export async function updateSetting(key: string, value: unknown) {
+  await requireRole("owner");
   const existing = await db
     .select()
     .from(storeSettings)
@@ -42,7 +44,7 @@ export async function updateSetting(key: string, value: unknown) {
     });
   }
 
-  revalidatePath("/pengaturan");
+  revalidatePath("/", "layout");
 }
 
 export async function getUsers() {
@@ -56,6 +58,7 @@ export async function getUsers() {
 }
 
 export async function updateUserRole(userId: string, role: "cashier" | "manager" | "owner") {
+  await requireRole("owner");
   await db.update(users).set({ role }).where(eq(users.id, userId));
   revalidatePath("/pengaturan");
 }

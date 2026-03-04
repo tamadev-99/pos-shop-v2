@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import type { Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Instrument_Sans } from "next/font/google";
 import { ToastProvider } from "@/components/ui/toast-provider";
+import { ThemeProvider } from "@/components/providers/theme-provider";
+import InstallPrompt from "@/components/install-prompt";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,27 +28,53 @@ export const metadata: Metadata = {
   description: "Sistem POS modern untuk bisnis retail Anda",
 };
 
+export const viewport: Viewport = {
+  themeColor: "#0b0d13",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id" className="dark">
+    <html lang="id" className="dark" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${instrumentSans.variable} antialiased bg-background text-foreground`}
       >
-        {/* Animated glass mesh background */}
-        <div className="glass-mesh-bg">
-          <div className="glass-orb glass-orb-1" />
-          <div className="glass-orb glass-orb-2" />
-          <div className="glass-orb glass-orb-3" />
-        </div>
-        {/* Content layer */}
-        <div className="relative z-10">
-          {children}
-        </div>
-        <ToastProvider />
+        <ThemeProvider>
+          {/* Background */}
+          <div className="glass-mesh-bg" />
+          {/* Content */}
+          <div className="relative z-10">
+            {children}
+          </div>
+          <ToastProvider />
+          <InstallPrompt />
+        </ThemeProvider>
+        {/* PWA Service Worker Registration */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(
+                    function(registration) {
+                      console.log('Service Worker registration successful with scope: ', registration.scope);
+                    },
+                    function(err) {
+                      console.log('Service Worker registration failed: ', err);
+                    }
+                  );
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

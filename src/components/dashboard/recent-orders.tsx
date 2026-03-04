@@ -33,7 +33,7 @@ export function RecentOrders({ orders }: RecentOrdersProps) {
           {orders.map((order) => (
             <div
               key={order.id}
-              className="flex items-center justify-between py-3 px-3 -mx-3 rounded-xl hover:bg-white/[0.03] transition-all duration-300"
+              className="flex items-center justify-between py-3 px-3 -mx-3 rounded-xl hover:bg-surface transition-all duration-300"
             >
               <div className="flex items-center gap-3">
                 <div>

@@ -17,6 +17,8 @@ export const orders = pgTable("orders", {
   taxAmount: integer("tax_amount").notNull().default(0),
   shippingFee: integer("shipping_fee").notNull().default(0),
   total: integer("total").notNull(),
+  cashPaid: integer("cash_paid"),
+  changeAmount: integer("change_amount"),
   status: orderStatusEnum("status").notNull().default("selesai"),
   paymentMethod: paymentMethodEnum("payment_method").notNull().default("tunai"),
   cashierId: text("cashier_id").references(() => users.id),

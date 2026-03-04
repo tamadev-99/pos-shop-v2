@@ -2,57 +2,56 @@
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/providers/auth-provider";
+import { useTheme } from "@/components/providers/theme-provider";
 import { authClient } from "@/lib/auth-client";
 import { hasAccess, type Role } from "@/lib/rbac";
+import { getNotifications } from "@/lib/actions/notifications";
+import { usePollingNotifications } from "@/hooks/use-polling-notifications";
 import {
   LayoutDashboard,
   Monitor,
   ShoppingCart,
   Package,
-  Warehouse,
   Truck,
-  Building2,
-  TicketPercent,
   Users,
+  TicketPercent,
   BarChart3,
-  Wallet,
   Clock,
-  RotateCcw,
   Bell,
-  QrCode,
-  ShieldCheck,
   Settings,
   LogOut,
   ChevronLeft,
-  Zap,
   Menu,
   X,
   User,
-  FolderOpen,
+  Sparkles,
+  Sun,
+  Moon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const navItems = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Kasir", href: "/pos", icon: Monitor },
-  { label: "Pesanan", href: "/pesanan", icon: ShoppingCart },
-  { label: "Produk", href: "/produk", icon: Package },
-  { label: "Inventaris", href: "/inventaris", icon: Warehouse },
-  { label: "Pembelian", href: "/pembelian", icon: Truck },
-  { label: "Supplier", href: "/supplier", icon: Building2 },
-  { label: "Pelanggan", href: "/pelanggan", icon: Users },
-  { label: "Retur", href: "/retur", icon: RotateCcw },
-  { label: "Promosi", href: "/promosi", icon: TicketPercent },
-  { label: "Laporan", href: "/laporan", icon: BarChart3 },
-  { label: "Keuangan", href: "/keuangan", icon: Wallet },
-  { label: "Shift", href: "/shift", icon: Clock },
-  { label: "Notifikasi", href: "/notifikasi", icon: Bell },
-  { label: "Barcode", href: "/barcode", icon: QrCode },
-  { label: "Audit Log", href: "/audit-log", icon: ShieldCheck },
-  { label: "Pengaturan", href: "/pengaturan", icon: Settings },
+  { label: "Dashboard", href: "/", icon: LayoutDashboard, group: "main" },
+  { label: "Kasir", href: "/pos", icon: Monitor, group: "main" },
+  { label: "Pesanan & Retur", href: "/pesanan", icon: ShoppingCart, group: "main" },
+  { label: "Katalog & Stok", href: "/produk", icon: Package, group: "inventory" },
+  { label: "Pembelian & Pemasok", href: "/pembelian", icon: Truck, group: "inventory" },
+  { label: "Member & Karyawan", href: "/kontak", icon: Users, group: "people" },
+  { label: "Promosi", href: "/promosi", icon: TicketPercent, group: "people" },
+  { label: "Laporan & Keuangan", href: "/laporan", icon: BarChart3, group: "system" },
+  { label: "Shift", href: "/shift", icon: Clock, group: "system" },
+  { label: "Notifikasi", href: "/notifikasi", icon: Bell, group: "system" },
+  { label: "Pengaturan", href: "/pengaturan", icon: Settings, group: "system" },
 ];
+
+const groupLabels: Record<string, string> = {
+  main: "Menu Utama",
+  inventory: "Inventaris",
+  people: "Orang",
+  system: "Sistem",
+};
 
 const roleLabels: Record<string, string> = {
   cashier: "Kasir",
@@ -64,8 +63,14 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useAuth();
+
+  // Start polling notifications
+  usePollingNotifications();
+
+  const { theme, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   const userRole = (user?.role || "cashier") as Role;
 
@@ -73,25 +78,30 @@ export function Sidebar() {
     hasAccess(userRole, item.href)
   );
 
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+  const groupedItems: Record<string, typeof navItems> = {};
+  filteredNavItems.forEach((item) => {
+    if (!groupedItems[item.group]) groupedItems[item.group] = [];
+    groupedItems[item.group].push(item);
+  });
 
   useEffect(() => {
-    if (mobileOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
+    setMobileOpen(false);
+    if (user?.id) {
+      getNotifications(user.id).then((notifs) => {
+        const unread = notifs.filter((n) => !n.isRead).length;
+        setUnreadNotifCount(unread);
+      });
     }
-    return () => {
-      document.body.style.overflow = "";
-    };
+  }, [pathname, user?.id]);
+
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
   }, [mobileOpen]);
 
   const handleLogout = async () => {
     await authClient.signOut();
-    router.push("/login");
-    router.refresh();
+    window.location.href = "/login";
   };
 
   const isActive = (href: string) =>
@@ -100,96 +110,142 @@ export function Sidebar() {
   const sidebarContent = (
     <>
       {/* Brand */}
-      <div className="flex items-center justify-between px-4 h-14 border-b border-white/[0.06] shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-accent to-accent-secondary text-white shrink-0 shadow-[0_0_24px_-3px_rgba(16,185,129,0.3)]">
-            <Zap size={16} />
+      <div className="flex items-center justify-between px-4 h-16 shrink-0 border-b border-border">
+        <div className="flex items-center gap-3">
+          <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white shrink-0 shadow-md">
+            <Sparkles size={18} />
           </div>
           {!collapsed && (
-            <span className="font-semibold text-sm tracking-tight font-[family-name:var(--font-display)]">
-              <span className="text-gradient">KasirPro</span>
-            </span>
+            <div className="flex flex-col">
+              <span className="font-bold text-base tracking-tight leading-none text-foreground">
+                KasirPro
+              </span>
+              <span className="text-[10px] font-medium tracking-wider text-accent uppercase mt-0.5">
+                Point of Sale
+              </span>
+            </div>
           )}
         </div>
         <button
           onClick={() => setMobileOpen(false)}
-          className="lg:hidden p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition-colors cursor-pointer"
+          className="lg:hidden p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition-colors cursor-pointer"
         >
           <X size={18} />
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
-        {filteredNavItems.map((item) => {
-          const active = isActive(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 lg:py-2 text-sm font-medium transition-all duration-300",
-                active
-                  ? "text-foreground bg-white/[0.07] shadow-[0_2px_12px_-3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.06)]"
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]",
-                collapsed && "lg:justify-center lg:px-0"
-              )}
-            >
-              {active && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-gradient-to-b from-accent to-accent-secondary shadow-[0_0_10px_rgba(16,185,129,0.4)]" />
-              )}
-              <item.icon
-                size={18}
-                className={cn(
-                  "shrink-0 transition-colors duration-300",
-                  active && "text-accent drop-shadow-[0_0_6px_rgba(16,185,129,0.4)]"
-                )}
-              />
-              {(!collapsed || mobileOpen) && <span>{item.label}</span>}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 py-2 px-2.5 overflow-y-auto space-y-4">
+        {Object.entries(groupedItems).map(([group, items]) => (
+          <div key={group}>
+            {(!collapsed || mobileOpen) && (
+              <p className="px-3 mb-1.5 text-[10px] font-semibold tracking-[0.12em] uppercase text-muted-foreground/50">
+                {groupLabels[group]}
+              </p>
+            )}
+            {collapsed && !mobileOpen && (
+              <div className="w-6 h-px bg-border mx-auto mb-2" />
+            )}
+
+            <div className="space-y-0.5">
+              {items.map((item) => {
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] transition-all duration-200",
+                      active
+                        ? "font-semibold text-accent bg-accent-muted border border-accent/15"
+                        : "font-medium text-muted-foreground hover:text-foreground hover:bg-surface",
+                      collapsed && !mobileOpen && "lg:justify-center lg:px-0"
+                    )}
+                  >
+                    {active && (
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-accent" />
+                    )}
+                    <item.icon
+                      size={18}
+                      className={cn(
+                        "shrink-0 transition-colors duration-200",
+                        active ? "text-accent" : "group-hover:text-foreground"
+                      )}
+                    />
+                    {item.href === "/notifikasi" && unreadNotifCount > 0 && (
+                      <span className="absolute left-[22px] top-[6px] w-2 h-2 rounded-full bg-destructive ring-2 ring-card-solid" />
+                    )}
+                    {(!collapsed || mobileOpen) && <span className="truncate">{item.label}</span>}
+                    {(!collapsed || mobileOpen) && item.href === "/notifikasi" && unreadNotifCount > 0 && (
+                      <span className="ml-auto flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-destructive-muted text-destructive text-[10px] font-bold border border-destructive/20">
+                        {unreadNotifCount}
+                      </span>
+                    )}
+                    {collapsed && !mobileOpen && (
+                      <span className="absolute left-full ml-3 px-2.5 py-1 rounded-lg bg-card-solid text-foreground text-xs font-medium whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 shadow-[var(--shadow-lg)] border border-border z-50">
+                        {item.label}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
-      {/* User info + Footer */}
-      <div className="border-t border-white/[0.06] p-2 space-y-0.5">
-        {/* User info */}
+      {/* Footer */}
+      <div className="p-2.5 space-y-1 border-t border-border">
+        {/* User card */}
         {user && (!collapsed || mobileOpen) && (
-          <div className="flex items-center gap-2.5 px-3 py-2.5 mb-1">
-            <div className="w-8 h-8 rounded-xl bg-white/[0.06] flex items-center justify-center shrink-0">
-              <User size={14} className="text-muted-foreground" />
+          <div className="flex items-center gap-3 px-3 py-2.5 mb-1 rounded-xl bg-surface border border-border transition-colors cursor-pointer">
+            <div className="w-8 h-8 rounded-lg bg-accent-muted flex items-center justify-center shrink-0 border border-accent/10">
+              <User size={14} className="text-accent" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium truncate">{user.name}</p>
-              <p className="text-[10px] text-accent">{roleLabels[user.role] || user.role}</p>
+              <p className="text-[13px] font-semibold text-foreground truncate leading-tight">
+                {user.name}
+              </p>
+              <p className="text-[10px] uppercase tracking-wider font-semibold text-accent/70">
+                {roleLabels[user.role] || user.role}
+              </p>
             </div>
           </div>
         )}
 
+        {/* Theme toggle */}
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={toggleTheme}
           className={cn(
-            "hidden lg:flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-all duration-300 w-full cursor-pointer",
-            collapsed && "justify-center px-0"
-          )}
-        >
-          <ChevronLeft
-            size={18}
-            className={cn(
-              "shrink-0 transition-transform duration-300",
-              collapsed && "rotate-180"
-            )}
-          />
-          {!collapsed && <span>Tutup Sidebar</span>}
-        </button>
-        <button
-          onClick={handleLogout}
-          className={cn(
-            "flex items-center gap-2.5 rounded-xl px-3 py-2.5 lg:py-2 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-300 w-full cursor-pointer",
+            "flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-all duration-200 w-full cursor-pointer",
             collapsed && !mobileOpen && "lg:justify-center lg:px-0"
           )}
         >
-          <LogOut size={18} className="shrink-0" />
+          {theme === "dark" ? <Sun size={16} className="shrink-0" /> : <Moon size={16} className="shrink-0" />}
+          {(!collapsed || mobileOpen) && <span>{theme === "dark" ? "Mode Terang" : "Mode Gelap"}</span>}
+        </button>
+
+        {/* Collapse toggle */}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className={cn(
+            "hidden lg:flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-all duration-200 w-full cursor-pointer",
+            collapsed && "justify-center px-0"
+          )}
+        >
+          <ChevronLeft size={16} className={cn("shrink-0 transition-transform duration-300", collapsed && "rotate-180")} />
+          {!collapsed && <span>Tutup Sidebar</span>}
+        </button>
+
+        {/* Logout */}
+        <button
+          onClick={handleLogout}
+          className={cn(
+            "group flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium text-muted-foreground hover:text-destructive hover:bg-destructive-muted transition-all duration-200 w-full cursor-pointer",
+            collapsed && !mobileOpen && "lg:justify-center lg:px-0"
+          )}
+        >
+          <LogOut size={16} className="shrink-0 transition-colors group-hover:text-destructive" />
           {(!collapsed || mobileOpen) && <span>Keluar</span>}
         </button>
       </div>
@@ -198,39 +254,39 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile top bar — frosted glass */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center gap-3 px-4 h-14 border-b border-white/[0.06] bg-[#07080f]/80 backdrop-blur-2xl shadow-[0_4px_24px_-4px_rgba(0,0,0,0.3)]">
+      {/* Mobile top bar */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center gap-3 px-4 h-14 bg-background-secondary/90 backdrop-blur-xl border-b border-border shadow-[var(--shadow-sm)]">
         <button
           onClick={() => setMobileOpen(true)}
-          className="p-2 -ml-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition-colors cursor-pointer"
+          className="p-2 -ml-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition-colors cursor-pointer"
         >
           <Menu size={20} />
         </button>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-accent to-accent-secondary text-white shadow-[0_0_16px_-3px_rgba(16,185,129,0.3)]">
-            <Zap size={14} />
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-md">
+            <Sparkles size={14} />
           </div>
-          <span className="font-semibold text-sm tracking-tight font-[family-name:var(--font-display)]">
-            <span className="text-gradient">KasirPro</span>
+          <span className="font-bold text-sm tracking-tight text-foreground">
+            KasirPro
           </span>
         </div>
       </div>
 
-      {/* Mobile drawer overlay */}
+      {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-md animate-fade-in"
+          className="lg:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm animate-fade-in"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
-      {/* Mobile drawer — heavy glass */}
+      {/* Mobile drawer */}
       <aside
         className={cn(
           "lg:hidden fixed top-0 left-0 bottom-0 z-50 w-[280px] flex flex-col",
-          "bg-[#0a0b14]/90 backdrop-blur-2xl",
-          "border-r border-white/[0.06]",
-          "shadow-[4px_0_32px_-4px_rgba(0,0,0,0.4)]",
+          "bg-background-secondary",
+          "border-r border-border",
+          "shadow-[var(--shadow-lg)]",
           "transition-transform duration-300 ease-out",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
@@ -238,7 +294,7 @@ export function Sidebar() {
         {sidebarContent}
       </aside>
 
-      {/* Desktop sidebar — glass panel */}
+      {/* Desktop sidebar */}
       <aside
         className={cn(
           "hidden lg:flex flex-col h-screen shrink-0",

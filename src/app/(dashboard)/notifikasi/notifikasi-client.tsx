@@ -87,9 +87,9 @@ const typeConfig: Record<
     accentBorder: "border-l-sky-500/50",
   },
   pembayaran: {
-    icon: <TrendingDown size={16} className="text-emerald-400" />,
+    icon: <TrendingDown size={16} className="text-accent" />,
     iconBg:
-      "bg-gradient-to-br from-emerald-500/20 to-teal-500/20 shadow-[0_0_12px_-3px_rgba(16,185,129,0.25)]",
+      "bg-gradient-to-br from-violet-500/20 to-indigo-600/20 shadow-[0_0_12px_-3px_rgba(16,185,129,0.25)]",
     accentBorder: "border-l-emerald-500/50",
   },
 };
@@ -168,7 +168,7 @@ export default function NotifikasiClient({ notifications: initialNotifications }
               Notifikasi
             </h1>
             {unreadCount > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold bg-gradient-to-r from-accent to-accent-secondary text-white shadow-[0_0_12px_-2px_rgba(16,185,129,0.4)]">
+              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold bg-gradient-to-r from-accent to-accent-hover text-white shadow-[0_0_12px_-2px_rgba(16,185,129,0.4)]">
                 {unreadCount}
               </span>
             )}
@@ -201,7 +201,7 @@ export default function NotifikasiClient({ notifications: initialNotifications }
               className={cn(
                 "p-0 overflow-hidden border-l-2 transition-all duration-300",
                 config.accentBorder,
-                !notif.isRead && "bg-white/[0.05]"
+                !notif.isRead && "bg-surface"
               )}
             >
               <div className="p-3 md:p-4 flex items-start gap-3">

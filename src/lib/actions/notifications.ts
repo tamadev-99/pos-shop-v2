@@ -21,6 +21,36 @@ export async function getNotifications(userId?: string) {
     .limit(100);
 }
 
+export async function getUnreadNotificationsForPolling(userId: string) {
+  const userNotifs = await db
+    .select()
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.isRead, false),
+        eq(notifications.userId, userId)
+      )
+    )
+    .orderBy(desc(notifications.createdAt));
+
+  // Also get global unread if userId is null (sistem, promo usually)
+  const globalNotifs = await db
+    .select()
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.isRead, false)
+      )
+    );
+
+  // Filter global ones that have userId null
+  const nullIdNotifs = globalNotifs.filter(n => n.userId === null);
+
+  return [...userNotifs, ...nullIdNotifs].sort((a, b) =>
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+}
+
 export async function markAsRead(id: string) {
   await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
   revalidatePath("/notifikasi");

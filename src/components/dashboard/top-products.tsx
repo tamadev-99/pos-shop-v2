@@ -30,8 +30,8 @@ export function TopProducts({ products }: TopProductsProps) {
                     className={cn(
                       "flex items-center justify-center w-5 h-5 rounded-md text-[10px] font-bold font-num",
                       index === 0
-                        ? "bg-gradient-to-br from-accent/20 to-accent-secondary/20 text-accent shadow-[0_0_10px_-3px_rgba(16,185,129,0.3)]"
-                        : "bg-white/[0.05] text-muted-foreground"
+                        ? "bg-gradient-to-br from-accent/20 to-accent-hover/20 text-accent shadow-[0_0_10px_-3px_rgba(16,185,129,0.3)]"
+                        : "bg-surface text-muted-foreground"
                     )}
                   >
                     {index + 1}
@@ -44,9 +44,9 @@ export function TopProducts({ products }: TopProductsProps) {
                   {formatNumber(product.sold)} terjual
                 </span>
               </div>
-              <div className="h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
+              <div className="h-1.5 rounded-full bg-card overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-accent via-accent-secondary to-accent-tertiary transition-all duration-700 ease-out shadow-[0_0_8px_-2px_rgba(16,185,129,0.3)]"
+                  className="h-full rounded-full bg-gradient-to-r from-accent via-accent-hover to-accent-light transition-all duration-700 ease-out shadow-[0_0_8px_-2px_rgba(16,185,129,0.3)]"
                   style={{ width: `${product.percentage}%` }}
                 />
               </div>

@@ -223,21 +223,21 @@ export function VariantSelector({
                     "active:scale-95",
                     isSelected
                       ? [
-                        "bg-gradient-to-r from-accent to-accent-secondary",
+                        "bg-gradient-to-r from-accent to-accent-hover",
                         "text-white border-transparent",
                         "shadow-[0_0_16px_-4px_rgba(16,185,129,0.4)]",
                       ].join(" ")
                       : zeroStock
                         ? [
-                          "bg-white/[0.02] text-muted-dim border-white/[0.06]",
+                          "bg-surface text-muted-dim border-border",
                           "line-through opacity-40 cursor-not-allowed",
                         ].join(" ")
                         : [
-                          "bg-white/[0.04] text-muted-foreground border-white/[0.08]",
-                          "hover:bg-white/[0.08] hover:text-foreground hover:border-white/[0.14]",
+                          "bg-card text-muted-foreground border-border",
+                          "hover:bg-surface-hover hover:text-foreground hover:border-border-strong",
                         ].join(" "),
                     unavailable &&
-                    "opacity-25 cursor-not-allowed hover:bg-white/[0.04] hover:text-muted-foreground hover:border-white/[0.08]"
+                    "opacity-25 cursor-not-allowed hover:bg-card hover:text-muted-foreground hover:border-border"
                   )}
                 >
                   {size}
@@ -252,8 +252,8 @@ export function VariantSelector({
           className={cn(
             "rounded-xl border px-4 py-3 transition-all duration-300",
             selectedVariant
-              ? "bg-white/[0.03] border-white/[0.08]"
-              : "bg-white/[0.015] border-white/[0.04] opacity-60"
+              ? "bg-surface border-border"
+              : "bg-white/[0.015] border-border opacity-60"
           )}
         >
           {selectedVariant ? (
@@ -261,7 +261,7 @@ export function VariantSelector({
               {/* Price */}
               <div>
                 <p className="text-[11px] text-muted-foreground mb-0.5">Harga</p>
-                <p className="text-base font-bold bg-gradient-to-r from-accent to-accent-secondary bg-clip-text text-transparent">
+                <p className="text-base font-bold bg-gradient-to-r from-accent to-accent-hover bg-clip-text text-transparent">
                   {formatRupiah(selectedVariant.sellPrice)}
                 </p>
               </div>

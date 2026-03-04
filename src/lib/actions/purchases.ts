@@ -7,9 +7,11 @@ import {
   purchaseOrderTimeline,
   productVariants,
   suppliers,
+  financialTransactions,
 } from "@/db/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/actions/auth-helpers";
 
 function generatePOId() {
   const now = new Date();
@@ -48,6 +50,7 @@ export async function createPurchaseOrder(data: {
   notes?: string;
   createdBy?: string;
 }) {
+  await requireRole("manager", "owner");
   const poId = generatePOId();
   const today = new Date().toISOString().split("T")[0];
   const total = data.items.reduce((sum, item) => sum + item.unitCost * item.qty, 0);
@@ -133,9 +136,19 @@ export async function updatePOStatus(
             .where(eq(productVariants.id, item.variantId));
         }
       }
+
+      // Fix #10: Record PO expense in financial transactions
+      await db.insert(financialTransactions).values({
+        date: today,
+        type: "keluar",
+        category: "Pembelian",
+        description: `Pembelian ${id} dari ${po.supplierId ? "supplier" : "unknown"}`,
+        amount: po.total,
+      });
     }
   }
 
   revalidatePath("/pembelian");
   revalidatePath("/inventaris");
+  revalidatePath("/keuangan");
 }

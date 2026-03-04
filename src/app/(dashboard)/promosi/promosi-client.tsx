@@ -109,7 +109,7 @@ const accentBorder: Record<PromoTypeDB, string> = {
 };
 
 const typeIcon: Record<PromoTypeDB, React.ReactNode> = {
-  percentage: <Percent size={18} className="text-emerald-400" />,
+  percentage: <Percent size={18} className="text-accent" />,
   fixed: <Tag size={18} className="text-cyan-400" />,
   buy_x_get_y: <Gift size={18} className="text-amber-400" />,
   bundle: <PackageOpen size={18} className="text-violet-400" />,
@@ -117,7 +117,7 @@ const typeIcon: Record<PromoTypeDB, React.ReactNode> = {
 
 const typeIconBg: Record<PromoTypeDB, string> = {
   percentage:
-    "bg-gradient-to-br from-emerald-500/20 to-teal-500/20 shadow-[0_0_16px_-4px_rgba(16,185,129,0.25)]",
+    "bg-gradient-to-br from-violet-500/20 to-indigo-600/20 shadow-[0_0_16px_-4px_rgba(16,185,129,0.25)]",
   fixed:
     "bg-gradient-to-br from-cyan-500/20 to-blue-500/20 shadow-[0_0_16px_-4px_rgba(6,182,212,0.25)]",
   buy_x_get_y:
@@ -383,7 +383,7 @@ export default function PromosiClient({ initialPromotions }: Props) {
                 </div>
 
                 {/* Value */}
-                <div className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                <div className="px-3 py-2 rounded-xl bg-card border border-border">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     {promo.type === "buy_x_get_y" ? "Promo" : "Nilai Diskon"}
                   </p>
@@ -414,7 +414,7 @@ export default function PromosiClient({ initialPromotions }: Props) {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center justify-end gap-1 pt-1 border-t border-white/[0.06]">
+                <div className="flex items-center justify-end gap-1 pt-1 border-t border-border">
                   <Button
                     variant="ghost"
                     size="icon"

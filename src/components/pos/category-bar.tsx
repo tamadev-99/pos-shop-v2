@@ -30,15 +30,15 @@ export function CategoryBar({ active, onChange, categories }: CategoryBarProps) 
             "shrink-0 rounded-xl px-4 py-1.5 text-xs font-medium transition-all duration-300 cursor-pointer",
             active === cat.id
               ? [
-                  "bg-gradient-to-r from-accent to-accent-secondary text-white",
+                  "bg-gradient-to-r from-accent to-accent-hover text-white",
                   "shadow-[0_0_20px_-4px_rgba(16,185,129,0.3),inset_0_1px_0_rgba(255,255,255,0.15)]",
-                  "border border-white/[0.1]",
+                  "border border-border-strong",
                 ]
               : [
-                  "bg-white/[0.04] text-muted-foreground",
-                  "border border-white/[0.06]",
+                  "bg-card text-muted-foreground",
+                  "border border-border",
                   "backdrop-blur-sm",
-                  "hover:text-foreground hover:bg-white/[0.07] hover:border-white/[0.1]",
+                  "hover:text-foreground hover:bg-white/[0.07] hover:border-border-strong",
                 ]
           )}
         >

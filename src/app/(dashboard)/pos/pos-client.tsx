@@ -5,14 +5,21 @@ import { CategoryBar } from "@/components/pos/category-bar";
 import { PaymentDialog } from "@/components/pos/payment-dialog";
 import { ProductGrid } from "@/components/pos/product-grid";
 import { VariantSelector } from "@/components/pos/variant-selector";
+import { ReceiptDialog } from "@/components/pos/receipt-dialog";
+import { BarcodeScannerDialog } from "@/components/pos/barcode-scanner";
+import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { type Product, type ProductVariant } from "@/lib/types";
-import { Search, ShoppingCart, Pause, Play } from "lucide-react";
-import { useMemo, useState, useCallback, useTransition } from "react";
+import { Search, ShoppingCart, Pause, Play, ScanBarcode } from "lucide-react";
+import { useMemo, useState, useCallback, useTransition, useEffect } from "react";
 import { cn, formatRupiah } from "@/lib/utils";
 import { createOrder, holdTransaction as holdTransactionAction, getHeldTransactions, deleteHeldTransaction } from "@/lib/actions/orders";
+import { redeemPoints } from "@/lib/actions/customers";
+import { useAuth } from "@/components/providers/auth-provider";
+import { getCurrentShift } from "@/lib/actions/shifts";
+
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -59,6 +66,34 @@ interface HeldTransaction {
   timestamp: string;
 }
 
+export interface Promotion {
+  id: string;
+  name: string;
+  type: "percentage" | "fixed" | "buy_x_get_y" | "bundle";
+  value: number;
+  minPurchase: number;
+  buyQty: number | null;
+  getQty: number | null;
+  appliesTo: "all" | "category" | "product";
+  targetIds: string[] | null;
+}
+
+interface CustomerData {
+  id: string;
+  name: string;
+  phone: string;
+  points: number;
+  tier: "Bronze" | "Silver" | "Gold" | "Platinum";
+  totalSpent: number;
+}
+
+const TIER_DISCOUNTS: Record<string, number> = {
+  Bronze: 0,
+  Silver: 2,
+  Gold: 5,
+  Platinum: 10,
+};
+
 function mapDBProductToProduct(dbProduct: DBProduct): Product {
   return {
     id: dbProduct.id,
@@ -84,22 +119,46 @@ function mapDBProductToProduct(dbProduct: DBProduct): Product {
   };
 }
 
-interface POSClientProps {
-  initialProducts: DBProduct[];
-  customers: { id: string; name: string }[];
+interface StoreSettings {
+  storeName: string;
+  storeAddress: string;
+  storePhone: string;
+  taxRate: number;
+  taxEnabled: boolean;
+  receiptHeader: string;
+  receiptFooter: string;
+  [key: string]: any;
 }
 
-export default function POSClient({ initialProducts, customers }: POSClientProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+interface POSClientProps {
+  initialProducts: DBProduct[];
+  customers: CustomerData[];
+  promotions: Promotion[];
+  printerConfig?: { type: string; target: string; paperWidth: string };
+  storeSettings?: StoreSettings;
+  initialHeldTransactions?: HeldTransaction[];
+}
 
-  // Map DB products to the mock-data Product shape
+export default function POSClient({ initialProducts, customers, promotions, printerConfig, storeSettings, initialHeldTransactions = [] }: POSClientProps) {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [isPending, startTransition] = useTransition();
+  const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
+
+  // Fetch active shift for current user
+  useEffect(() => {
+    if (user?.id) {
+      getCurrentShift(user.id).then((shift) => {
+        setActiveShiftId(shift?.id || null);
+      });
+    }
+  }, [user?.id]);
+
   const products = useMemo(
     () => initialProducts.map(mapDBProductToProduct),
     [initialProducts]
   );
 
-  // Build dynamic categories from actual product data
   const categoryOptions = useMemo(() => {
     const uniqueCategories = [
       ...new Set(initialProducts.map((p) => p.category?.name).filter(Boolean)),
@@ -119,8 +178,33 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
   const [variantOpen, setVariantOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [shippingFee, setShippingFee] = useState(0);
-  const [heldTransactions, setHeldTransactions] = useState<HeldTransaction[]>([]);
+  const [heldTransactions, setHeldTransactions] = useState<HeldTransaction[]>(initialHeldTransactions);
   const [heldListOpen, setHeldListOpen] = useState(false);
+
+  // Barcode scanner state
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Promotion & discount state
+  const [selectedPromo, setSelectedPromo] = useState<Promotion | null>(null);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+
+  // Receipt state
+  const [lastOrderId, setLastOrderId] = useState<string | null>(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<{
+    items: { name: string; variantInfo: string; qty: number; price: number }[];
+    subtotal: number;
+    discountAmount: number;
+    taxAmount: number;
+    shippingFee: number;
+    total: number;
+    paymentMethod: string;
+    customerName: string;
+    customerPhone?: string;
+    cashPaid?: number;
+    changeAmount?: number;
+  } | null>(null);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -163,6 +247,37 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
     setVariantOpen(false);
   };
 
+  // Barcode/SKU lookup and auto-add-to-cart
+  const handleBarcodeScan = useCallback((barcode: string) => {
+    // Search all products for matching SKU or barcode
+    for (const product of products) {
+      for (const variant of product.variants) {
+        if (
+          (variant.barcode && variant.barcode.toLowerCase() === barcode.toLowerCase()) ||
+          (variant.sku && variant.sku.toLowerCase() === barcode.toLowerCase())
+        ) {
+          if (variant.status !== "aktif" || variant.stock <= 0) {
+            const msg = `${product.name} (${variant.color}/${variant.size}) — stok habis`;
+            setScanResult({ success: false, message: msg });
+            toast.error(msg);
+            return;
+          }
+          addToCart(product, variant);
+          const msg = `${product.name} (${variant.color}/${variant.size}) ditambahkan`;
+          setScanResult({ success: true, message: msg });
+          toast.success(msg);
+          return;
+        }
+      }
+    }
+    // Not found
+    setScanResult({ success: false, message: `Barcode "${barcode}" tidak ditemukan` });
+    toast.error(`Barcode "${barcode}" tidak ditemukan`);
+  }, [products, addToCart]);
+
+  // USB/Bluetooth barcode scanner keyboard hook — always active on POS page
+  useBarcodeScanner(handleBarcodeScan);
+
   const updateQty = (id: string, qty: number) => {
     setCart((prev) =>
       prev.map((item) => (item.id === id ? { ...item, qty } : item))
@@ -176,11 +291,49 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
   const clearCart = () => setCart([]);
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const tax = Math.round(subtotal * 0.11);
-  const total = subtotal + tax + shippingFee;
+
+  // Discount calculations
+  const selectedCustomerData = customers.find((c) => c.id === selectedCustomer);
+
+  const tierDiscountPct = selectedCustomerData ? (TIER_DISCOUNTS[selectedCustomerData.tier] || 0) : 0;
+  const tierDiscount = Math.round(subtotal * (tierDiscountPct / 100));
+
+  function calcPromoDiscount(promo: Promotion): number {
+    if (subtotal < (promo.minPurchase || 0)) return 0;
+    switch (promo.type) {
+      case "percentage":
+        return Math.round(subtotal * (promo.value / 100));
+      case "fixed":
+        return Math.min(promo.value, subtotal);
+      case "buy_x_get_y": {
+        if (!promo.buyQty || !promo.getQty) return 0;
+        const totalQty = cart.reduce((s, i) => s + i.qty, 0);
+        const sets = Math.floor(totalQty / (promo.buyQty + promo.getQty));
+        const avgPrice = subtotal / totalQty;
+        return Math.round(sets * promo.getQty * avgPrice);
+      }
+      case "bundle":
+        return Math.min(promo.value, subtotal);
+      default:
+        return 0;
+    }
+  }
+
+  const promoDiscount = selectedPromo ? calcPromoDiscount(selectedPromo) : 0;
+
+  // Points: 1 point = Rp 1, cannot exceed subtotal
+  const maxRedeemable = Math.min(selectedCustomerData?.points || 0, subtotal);
+  const pointsDiscount = Math.min(pointsToRedeem, maxRedeemable);
+
+  // Best of tier vs promo (don't stack), plus points
+  const bestDiscount = Math.max(tierDiscount, promoDiscount);
+  const discountAmount = bestDiscount + pointsDiscount;
+
+  const taxRate = storeSettings?.taxRate ?? 11;
+  const tax = Math.round((subtotal - bestDiscount) * (taxRate / 100));
+  const total = Math.max(0, subtotal - discountAmount + tax + shippingFee);
   const cartItemCount = cart.reduce((sum, i) => sum + i.qty, 0);
 
-  // Find DB product info for a cart item (to get costPrice for the order)
   const findDBVariant = useCallback(
     (variantId: string) => {
       for (const p of initialProducts) {
@@ -192,7 +345,19 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
     [initialProducts]
   );
 
-  const handlePaymentConfirm = async (paymentMethod: "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewallet") => {
+  // Bug Fix #6: Block checkout without active shift
+  const tryCheckout = useCallback(() => {
+    if (!activeShiftId) {
+      toast.error("Anda harus membuka shift terlebih dahulu sebelum melakukan transaksi.", {
+        description: "Buka shift di halaman Manajemen Shift.",
+        duration: 5000,
+      });
+      return;
+    }
+    return true;
+  }, [activeShiftId]);
+
+  const handlePaymentConfirm = async (paymentMethod: "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewallet", cashPaid?: number, changeAmount?: number) => {
     try {
       const orderItems = cart.map((item) => {
         const found = findDBVariant(item.variantId);
@@ -208,25 +373,67 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
 
       const orderId = await createOrder({
         customerId: selectedCustomer || undefined,
+        customerName: selectedCustomerData?.name || "Pelanggan Umum",
         items: orderItems,
         subtotal,
+        discountAmount,
         taxAmount: tax,
         shippingFee,
         total,
         paymentMethod,
+        cashierId: user?.id,
+        shiftId: activeShiftId || undefined,
       });
 
+      // Redeem points if used
+      if (selectedCustomer && pointsToRedeem > 0) {
+        await redeemPoints(selectedCustomer, pointsToRedeem);
+      }
+
+      setLastOrderId(orderId);
+
+      // Show receipt
+      setReceiptData({
+        items: cart.map((item) => ({
+          name: item.name,
+          variantInfo: `${item.color} - ${item.size}`,
+          qty: item.qty,
+          price: item.price,
+        })),
+        subtotal,
+        discountAmount,
+        taxAmount: tax,
+        shippingFee,
+        total,
+        paymentMethod,
+        customerName: selectedCustomerData?.name || "Pelanggan Umum",
+        customerPhone: selectedCustomerData?.phone,
+        cashPaid,
+        changeAmount,
+      });
+      setReceiptOpen(true);
       setPaymentOpen(false);
+
+      toast.success(`Pesanan ${orderId} berhasil dibuat!`);
+      router.refresh();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Gagal membuat pesanan. Silakan coba lagi.";
+      toast.error(message);
+      console.error("Order creation error:", error);
+    }
+  };
+
+  const handlePaymentClose = () => {
+    setPaymentOpen(false);
+    if (lastOrderId) {
+      // Reset all state after payment success
       setCart([]);
       setCartOpen(false);
       setShippingFee(0);
       setSelectedCustomer("");
-
-      toast.success(`Pesanan ${orderId} berhasil dibuat!`);
-      router.refresh();
-    } catch (error) {
-      toast.error("Gagal membuat pesanan. Silakan coba lagi.");
-      console.error("Order creation error:", error);
+      setSelectedPromo(null);
+      setPointsToRedeem(0);
+      setLastOrderId(null);
     }
   };
 
@@ -253,6 +460,8 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
       setCart([]);
       setShippingFee(0);
       setSelectedCustomer("");
+      setSelectedPromo(null);
+      setPointsToRedeem(0);
       toast.success("Transaksi berhasil ditahan");
     } catch (error) {
       toast.error("Gagal menahan transaksi");
@@ -275,6 +484,25 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
     }
   };
 
+  // Build receipt data for the payment dialog
+  const paymentReceiptData = lastOrderId
+    ? {
+      items: cart.map((item) => ({ name: `${item.name} (${item.color}/${item.size})`, qty: item.qty, price: item.price })),
+      customerName: selectedCustomerData?.name || "Pelanggan Umum",
+      subtotal,
+      discountAmount,
+      tax,
+      shippingFee,
+      total,
+      paymentMethod: "",
+      storeName: storeSettings?.storeName || "Toko Fashion",
+      storeAddress: storeSettings?.receiptAddress || storeSettings?.storeAddress || "",
+      storePhone: storeSettings?.storePhone || "",
+      receiptHeader: storeSettings?.receiptHeader || storeSettings?.storeName || "Toko Fashion",
+      receiptFooter: storeSettings?.receiptFooter || "Terima kasih atas kunjungan Anda!",
+    }
+    : null;
+
   return (
     <div className="flex h-screen relative">
       {/* Left — Products */}
@@ -289,16 +517,26 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
             className="max-w-xs"
           />
           <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setScanResult(null); setScannerOpen(true); }}
+              className="flex px-2.5 sm:px-3"
+              title="Barcode Scanner"
+            >
+              <ScanBarcode size={16} />
+              <span className="hidden sm:inline">Scan</span>
+            </Button>
             {heldTransactions.length > 0 && (
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => setHeldListOpen(true)}
-                className="relative hidden sm:flex"
+                className="relative flex px-2.5 sm:px-3"
               >
                 <Pause size={14} />
-                Ditahan
-                <span className="ml-1 flex items-center justify-center min-w-4 h-4 rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
+                <span className="hidden sm:inline">Ditahan</span>
+                <span className="absolute -top-1.5 -right-1.5 sm:static sm:ml-1 flex items-center justify-center min-w-4 h-4 rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white shadow-[0_0_12px_-2px_rgba(245,158,11,0.4)] sm:shadow-none">
                   {heldTransactions.length}
                 </span>
               </Button>
@@ -309,11 +547,11 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
             {/* Mobile cart toggle */}
             <button
               onClick={() => setCartOpen(true)}
-              className="lg:hidden relative flex items-center justify-center w-10 h-10 rounded-xl bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl cursor-pointer hover:bg-white/[0.08] transition-all"
+              className="lg:hidden relative flex items-center justify-center w-10 h-10 rounded-xl bg-surface border border-border backdrop-blur-xl cursor-pointer hover:bg-surface-hover transition-all"
             >
               <ShoppingCart size={18} className="text-accent" />
               {cartItemCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-5 h-5 rounded-full bg-gradient-to-r from-accent to-accent-secondary px-1 text-[10px] font-bold text-white shadow-[0_0_12px_-2px_rgba(16,185,129,0.4)]">
+                <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-5 h-5 rounded-full bg-gradient-to-r from-accent to-accent-hover px-1 text-[10px] font-bold text-white shadow-[0_0_12px_-2px_rgba(16,185,129,0.4)]">
                   {cartItemCount}
                 </span>
               )}
@@ -339,14 +577,27 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
           onUpdateQty={updateQty}
           onRemove={removeItem}
           onClear={clearCart}
-          onCheckout={() => setPaymentOpen(true)}
+          onCheckout={() => { if (tryCheckout()) setPaymentOpen(true); }}
           shippingFee={shippingFee}
           onShippingFeeChange={setShippingFee}
           selectedCustomer={selectedCustomer}
-          onCustomerChange={setSelectedCustomer}
+          onCustomerChange={(id) => {
+            setSelectedCustomer(id);
+            setPointsToRedeem(0);
+          }}
           customers={customers}
           onHold={holdTransaction}
           heldCount={heldTransactions.length}
+          promotions={promotions}
+          selectedPromo={selectedPromo}
+          onPromoChange={setSelectedPromo}
+          customerTier={selectedCustomerData?.tier}
+          tierDiscountPct={tierDiscountPct}
+          customerPoints={selectedCustomerData?.points}
+          pointsToRedeem={pointsToRedeem}
+          onPointsRedeemChange={setPointsToRedeem}
+          discountAmount={discountAmount}
+          taxRate={taxRate}
         />
       </div>
 
@@ -362,8 +613,8 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
       <div
         className={cn(
           "lg:hidden fixed top-0 right-0 bottom-0 z-50 w-[320px] max-w-[85vw]",
-          "bg-[#0a0b14]/90 backdrop-blur-2xl",
-          "border-l border-white/[0.06]",
+          "bg-background-secondary/90 backdrop-blur-2xl",
+          "border-l border-border",
           "shadow-[-4px_0_32px_-4px_rgba(0,0,0,0.4)]",
           "transition-transform duration-300 ease-out",
           cartOpen ? "translate-x-0" : "translate-x-full"
@@ -375,17 +626,32 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
           onRemove={removeItem}
           onClear={clearCart}
           onCheckout={() => {
-            setCartOpen(false);
-            setPaymentOpen(true);
+            if (tryCheckout()) {
+              setCartOpen(false);
+              setPaymentOpen(true);
+            }
           }}
           onClose={() => setCartOpen(false)}
           shippingFee={shippingFee}
           onShippingFeeChange={setShippingFee}
           selectedCustomer={selectedCustomer}
-          onCustomerChange={setSelectedCustomer}
+          onCustomerChange={(id) => {
+            setSelectedCustomer(id);
+            setPointsToRedeem(0);
+          }}
           customers={customers}
           onHold={holdTransaction}
           heldCount={heldTransactions.length}
+          promotions={promotions}
+          selectedPromo={selectedPromo}
+          onPromoChange={setSelectedPromo}
+          customerTier={selectedCustomerData?.tier}
+          tierDiscountPct={tierDiscountPct}
+          customerPoints={selectedCustomerData?.points}
+          pointsToRedeem={pointsToRedeem}
+          onPointsRedeemChange={setPointsToRedeem}
+          discountAmount={discountAmount}
+          taxRate={taxRate}
         />
       </div>
 
@@ -400,11 +666,12 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
       {/* Payment Dialog */}
       <PaymentDialog
         open={paymentOpen}
-        onClose={() => setPaymentOpen(false)}
+        onClose={handlePaymentClose}
         total={total}
         subtotal={subtotal}
         tax={tax}
         shippingFee={shippingFee}
+        discountAmount={discountAmount}
         onConfirm={handlePaymentConfirm}
       />
 
@@ -426,7 +693,7 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
               return (
                 <div
                   key={held.id}
-                  className="flex items-center justify-between rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 hover:bg-white/[0.05] transition-all"
+                  className="flex items-center justify-between rounded-xl bg-surface border border-border p-3 hover:bg-surface transition-all"
                 >
                   <div>
                     <p className="text-xs font-medium text-foreground">
@@ -450,6 +717,54 @@ export default function POSClient({ initialProducts, customers }: POSClientProps
           )}
         </div>
       </Dialog>
+
+      {/* Barcode Scanner Dialog */}
+      <BarcodeScannerDialog
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={handleBarcodeScan}
+        lastResult={scanResult}
+      />
+
+      {/* Receipt Dialog */}
+      {lastOrderId && receiptData && (
+        <ReceiptDialog
+          open={receiptOpen}
+          onClose={() => {
+            setReceiptOpen(false);
+            // Reset cart after viewing receipt
+            setCart([]);
+            setCartOpen(false);
+            setShippingFee(0);
+            setSelectedCustomer("");
+            setSelectedPromo(null);
+            setPointsToRedeem(0);
+            setLastOrderId(null);
+            setReceiptData(null);
+          }}
+          orderId={lastOrderId}
+          items={receiptData.items}
+          subtotal={receiptData.subtotal}
+          discountAmount={receiptData.discountAmount}
+          taxAmount={receiptData.taxAmount}
+          shippingFee={receiptData.shippingFee}
+          total={receiptData.total}
+          paymentMethod={receiptData.paymentMethod}
+          customerName={receiptData.customerName}
+          customerPhone={receiptData.customerPhone}
+          cashPaid={receiptData.cashPaid}
+          changeAmount={receiptData.changeAmount}
+          cashierName={user?.name || "Kasir"}
+          storeName={storeSettings?.storeName}
+          storeAddress={storeSettings?.storeAddress}
+          storePhone={storeSettings?.storePhone}
+          receiptHeader={storeSettings?.receiptHeader}
+          receiptFooter={storeSettings?.receiptFooter}
+          printerType={storeSettings?.printerType}
+          printerTarget={storeSettings?.printerTarget}
+          receiptWidth={storeSettings?.receiptWidth}
+        />
+      )}
     </div>
   );
 }
