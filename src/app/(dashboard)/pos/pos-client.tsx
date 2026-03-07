@@ -300,34 +300,68 @@ export default function POSClient({ initialProducts, customers, promotions, prin
 
   function calcPromoDiscount(promo: Promotion): number {
     if (subtotal < (promo.minPurchase || 0)) return 0;
+
+    // Filter items by appliesTo scope
+    let eligibleItems = cart;
+    if (promo.appliesTo === "category" && promo.targetIds && promo.targetIds.length > 0) {
+      eligibleItems = cart.filter((item) => {
+        const dbData = findDBVariant(item.variantId);
+        return dbData && promo.targetIds!.includes(dbData.product.categoryId);
+      });
+    } else if (promo.appliesTo === "product" && promo.targetIds && promo.targetIds.length > 0) {
+      eligibleItems = cart.filter((item) => promo.targetIds!.includes(item.productId));
+    }
+
+    if (eligibleItems.length === 0) return 0;
+    const eligibleSubtotal = eligibleItems.reduce((sum, i) => sum + i.price * i.qty, 0);
+
     switch (promo.type) {
       case "percentage":
-        return Math.round(subtotal * (promo.value / 100));
+        return Math.round(eligibleSubtotal * (promo.value / 100));
       case "fixed":
-        return Math.min(promo.value, subtotal);
+        return Math.min(promo.value, eligibleSubtotal);
       case "buy_x_get_y": {
         if (!promo.buyQty || !promo.getQty) return 0;
-        const totalQty = cart.reduce((s, i) => s + i.qty, 0);
+        const totalQty = eligibleItems.reduce((s, i) => s + i.qty, 0);
+        if (totalQty === 0) return 0;
         const sets = Math.floor(totalQty / (promo.buyQty + promo.getQty));
-        const avgPrice = subtotal / totalQty;
+        const avgPrice = eligibleSubtotal / totalQty;
         return Math.round(sets * promo.getQty * avgPrice);
       }
       case "bundle":
-        return Math.min(promo.value, subtotal);
+        return Math.min(promo.value, eligibleSubtotal);
       default:
         return 0;
     }
   }
 
-  const promoDiscount = selectedPromo ? calcPromoDiscount(selectedPromo) : 0;
+  // Auto-apply: pick the best promo automatically
+  const autoAppliedPromo = useMemo(() => {
+    if (cart.length === 0 || promotions.length === 0) return null;
+    let best: Promotion | null = null;
+    let bestDisc = 0;
+    for (const promo of promotions) {
+      const disc = calcPromoDiscount(promo);
+      if (disc > bestDisc) {
+        bestDisc = disc;
+        best = promo;
+      }
+    }
+    return best;
+  }, [cart, promotions, subtotal]);
+
+  // Use manual selection if set, otherwise auto-apply
+  const effectivePromo = selectedPromo || autoAppliedPromo;
+  const isAutoPromo = !selectedPromo && !!autoAppliedPromo;
+  const promoDiscount = effectivePromo ? calcPromoDiscount(effectivePromo) : 0;
 
   // Points: 1 point = Rp 1, cannot exceed subtotal
   const maxRedeemable = Math.min(selectedCustomerData?.points || 0, subtotal);
   const pointsDiscount = Math.min(pointsToRedeem, maxRedeemable);
 
   // Best of tier vs promo (don't stack), plus points
-  const bestDiscount = Math.max(tierDiscount, promoDiscount);
-  const discountAmount = bestDiscount + pointsDiscount;
+  const bestBaseDiscount = Math.max(tierDiscount, promoDiscount);
+  const discountAmount = bestBaseDiscount + pointsDiscount;
 
   const taxRate = storeSettings?.taxRate ?? 11;
   const taxMode = storeSettings?.taxIncluded ?? "no";
@@ -377,7 +411,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
     return true;
   }, [activeShiftId]);
 
-  const handlePaymentConfirm = async (paymentMethod: "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewallet", cashPaid?: number, changeAmount?: number) => {
+  const handlePaymentConfirm = async (paymentMethod: "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewallet", cashPaid?: number, changeAmount?: number, splitNote?: string) => {
     try {
       const orderItems = cart.map((item) => {
         const found = findDBVariant(item.variantId);
@@ -403,6 +437,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
         paymentMethod,
         cashierId: user?.id,
         shiftId: activeShiftId || undefined,
+        notes: splitNote || undefined,
       });
 
       // Redeem points if used
@@ -609,7 +644,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
           onHold={holdTransaction}
           heldCount={heldTransactions.length}
           promotions={promotions}
-          selectedPromo={selectedPromo}
+          selectedPromo={effectivePromo}
           onPromoChange={setSelectedPromo}
           customerTier={selectedCustomerData?.tier}
           tierDiscountPct={tierDiscountPct}
@@ -621,6 +656,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
           taxMode={taxMode}
           calculatedSubtotal={discountedSubtotal}
           calculatedTotal={total}
+          isAutoPromo={isAutoPromo}
         />
       </div>
 
@@ -666,7 +702,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
           onHold={holdTransaction}
           heldCount={heldTransactions.length}
           promotions={promotions}
-          selectedPromo={selectedPromo}
+          selectedPromo={effectivePromo}
           onPromoChange={setSelectedPromo}
           customerTier={selectedCustomerData?.tier}
           tierDiscountPct={tierDiscountPct}
@@ -678,6 +714,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
           taxMode={taxMode}
           calculatedSubtotal={discountedSubtotal}
           calculatedTotal={total}
+          isAutoPromo={isAutoPromo}
         />
       </div>
 

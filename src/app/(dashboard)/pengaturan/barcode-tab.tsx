@@ -17,11 +17,18 @@ import {
   Package,
   CheckCircle2,
   AlertCircle,
+  Bluetooth,
 } from "lucide-react";
 import { useState, useTransition, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { getVariantByBarcode } from "@/lib/actions/products";
 import { formatRupiah as fmtR } from "@/lib/utils";
+import {
+  LABEL_PRESETS,
+  buildBarcodeLabelCommands,
+  printReceipt,
+  type PrinterConfig,
+} from "@/lib/thermal-printer";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -170,6 +177,11 @@ export function BarcodeTab({ variants }: BarcodeTabProps) {
   const [selectedForPrint, setSelectedForPrint] = useState<Set<string>>(new Set());
   const [printQty, setPrintQty] = useState("1");
   const [isPending, startTransition] = useTransition();
+  const [labelSizeId, setLabelSizeId] = useState(LABEL_PRESETS[2].id); // 50×30mm default
+  const [btPrinting, setBtPrinting] = useState(false);
+
+  const selectedLabelSize = LABEL_PRESETS.find((l) => l.id === labelSizeId) || LABEL_PRESETS[2];
+  const labelSizeOptions = LABEL_PRESETS.map((l) => ({ label: l.label, value: l.id }));
 
   const filtered = variants.filter(
     (p) =>
@@ -180,12 +192,14 @@ export function BarcodeTab({ variants }: BarcodeTabProps) {
 
   // ── Render barcode label to canvas ────────────────────────────────────────
   const renderBarcodeToCanvas = useCallback(
-    (variant: VariantFlat, type: string, scale = 3): HTMLCanvasElement => {
+    (variant: VariantFlat, type: string, scale = 3, customSize?: { widthMm: number; heightMm: number }): HTMLCanvasElement => {
       const canvas = document.createElement("canvas");
-      const labelW = 200 * scale;
-      const labelH = 140 * scale;
-      canvas.width = labelW;
-      canvas.height = labelH;
+      // Use label size or default proportions
+      const DPM = 8; // dots per mm
+      const labelW = customSize ? customSize.widthMm * DPM * (scale / 3) : 200 * scale;
+      const labelH = customSize ? customSize.heightMm * DPM * (scale / 3) : 140 * scale;
+      canvas.width = Math.round(labelW);
+      canvas.height = Math.round(labelH);
       const ctx = canvas.getContext("2d")!;
 
       // White background
@@ -265,17 +279,19 @@ export function BarcodeTab({ variants }: BarcodeTabProps) {
 
   const handleDownload = useCallback(() => {
     if (!selectedVariant) return;
-    const canvas = renderBarcodeToCanvas(selectedVariant, barcodeType);
+    const canvas = renderBarcodeToCanvas(selectedVariant, barcodeType, 3, selectedLabelSize);
     const link = document.createElement("a");
     link.download = `barcode-${selectedVariant.sku}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
     toast.success("Barcode berhasil diunduh!");
-  }, [selectedVariant, barcodeType, renderBarcodeToCanvas]);
+  }, [selectedVariant, barcodeType, renderBarcodeToCanvas, selectedLabelSize]);
 
   const handlePrintSingle = useCallback(() => {
     if (!selectedVariant) return;
-    const canvas = renderBarcodeToCanvas(selectedVariant, barcodeType);
+    const canvas = renderBarcodeToCanvas(selectedVariant, barcodeType, 3, selectedLabelSize);
+    const labelW = `${selectedLabelSize.widthMm}mm`;
+    const labelH = `${selectedLabelSize.heightMm}mm`;
     const printWindow = window.open("", "_blank", "width=400,height=300");
     if (!printWindow) return;
     printWindow.document.write(`
@@ -283,7 +299,10 @@ export function BarcodeTab({ variants }: BarcodeTabProps) {
       <style>
         body { margin: 0; display: flex; justify-content: center; align-items: center; }
         img { max-width: 100%; }
-        @media print { body { margin: 0; } }
+        @media print {
+          body { margin: 0; }
+          @page { size: ${labelW} ${labelH}; margin: 0; }
+        }
       </style></head><body>
         <img src="${canvas.toDataURL("image/png")}" />
       </body></html>
@@ -291,7 +310,23 @@ export function BarcodeTab({ variants }: BarcodeTabProps) {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
-  }, [selectedVariant, barcodeType, renderBarcodeToCanvas]);
+  }, [selectedVariant, barcodeType, renderBarcodeToCanvas, selectedLabelSize]);
+
+  const handleBluetoothPrintSingle = useCallback(async () => {
+    if (!selectedVariant) return;
+    setBtPrinting(true);
+    try {
+      const canvas = renderBarcodeToCanvas(selectedVariant, barcodeType, 3, selectedLabelSize);
+      const commands = buildBarcodeLabelCommands(canvas, "58");
+      const config: PrinterConfig = { type: "bluetooth", target: "", paperWidth: "58" };
+      await printReceipt(commands, config);
+      toast.success("Label berhasil dicetak via Bluetooth!");
+    } catch (err: any) {
+      toast.error(err.message || "Gagal mencetak via Bluetooth");
+    } finally {
+      setBtPrinting(false);
+    }
+  }, [selectedVariant, barcodeType, renderBarcodeToCanvas, selectedLabelSize]);
 
   const handleBatchPrint = useCallback(() => {
     if (selectedForPrint.size === 0) return;
@@ -300,9 +335,11 @@ export function BarcodeTab({ variants }: BarcodeTabProps) {
     const printWindow = window.open("", "_blank", "width=800,height=600");
     if (!printWindow) return;
 
+    const labelW = `${selectedLabelSize.widthMm}mm`;
+    const labelH = `${selectedLabelSize.heightMm}mm`;
     const images: string[] = [];
     for (const variant of selected) {
-      const canvas = renderBarcodeToCanvas(variant, "barcode", 2);
+      const canvas = renderBarcodeToCanvas(variant, "barcode", 2, selectedLabelSize);
       const dataUrl = canvas.toDataURL("image/png");
       for (let i = 0; i < qty; i++) {
         images.push(dataUrl);
@@ -314,11 +351,11 @@ export function BarcodeTab({ variants }: BarcodeTabProps) {
       <style>
         body { margin: 0; padding: 8px; }
         .grid { display: flex; flex-wrap: wrap; gap: 4px; }
-        .label { width: 48mm; height: 30mm; display: flex; align-items: center; justify-content: center; page-break-inside: avoid; }
+        .label { width: ${labelW}; height: ${labelH}; display: flex; align-items: center; justify-content: center; page-break-inside: avoid; }
         .label img { max-width: 100%; max-height: 100%; }
         @media print {
           body { margin: 0; padding: 2mm; }
-          .label { width: 48mm; height: 30mm; }
+          .label { width: ${labelW}; height: ${labelH}; }
         }
       </style></head><body>
         <div class="grid">
@@ -329,7 +366,32 @@ export function BarcodeTab({ variants }: BarcodeTabProps) {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
-  }, [selectedForPrint, printQty, variants, renderBarcodeToCanvas]);
+  }, [selectedForPrint, printQty, variants, renderBarcodeToCanvas, selectedLabelSize]);
+
+  const handleBatchBluetoothPrint = useCallback(async () => {
+    if (selectedForPrint.size === 0) return;
+    setBtPrinting(true);
+    try {
+      const qty = parseInt(printQty) || 1;
+      const selected = variants.filter((v) => selectedForPrint.has(v.id));
+      const config: PrinterConfig = { type: "bluetooth", target: "", paperWidth: "58" };
+
+      for (const variant of selected) {
+        for (let i = 0; i < qty; i++) {
+          const canvas = renderBarcodeToCanvas(variant, "barcode", 3, selectedLabelSize);
+          const commands = buildBarcodeLabelCommands(canvas, "58");
+          await printReceipt(commands, config);
+          // Small delay between labels
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      }
+      toast.success(`${selected.length * qty} label berhasil dicetak via Bluetooth!`);
+    } catch (err: any) {
+      toast.error(err.message || "Gagal mencetak via Bluetooth");
+    } finally {
+      setBtPrinting(false);
+    }
+  }, [selectedForPrint, printQty, variants, renderBarcodeToCanvas, selectedLabelSize]);
 
   function handleScan() {
     if (!scanInput.trim()) return;
@@ -482,6 +544,16 @@ export function BarcodeTab({ variants }: BarcodeTabProps) {
                   className="w-36"
                 />
               </div>
+              {/* Label size selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-muted-dim uppercase tracking-wider">Ukuran Label</span>
+                <Select
+                  options={labelSizeOptions}
+                  value={labelSizeId}
+                  onChange={(e) => setLabelSizeId(e.target.value)}
+                  className="w-36"
+                />
+              </div>
 
               {selectedVariant ? (
                 <div className="space-y-4">
@@ -528,6 +600,16 @@ export function BarcodeTab({ variants }: BarcodeTabProps) {
                       Cetak
                     </Button>
                   </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full"
+                    onClick={handleBluetoothPrintSingle}
+                    disabled={btPrinting}
+                  >
+                    <Bluetooth size={13} />
+                    {btPrinting ? "Mencetak..." : "Cetak via Bluetooth"}
+                  </Button>
                 </div>
               ) : (
                 <div className="flex flex-col items-center py-12 text-center">
@@ -661,6 +743,20 @@ export function BarcodeTab({ variants }: BarcodeTabProps) {
               <Printer size={15} />
               Cetak {selectedForPrint.size > 0 ? `(${selectedForPrint.size * (parseInt(printQty) || 1)} label)` : ""}
             </Button>
+            <Button
+              variant="secondary"
+              disabled={selectedForPrint.size === 0 || btPrinting}
+              onClick={handleBatchBluetoothPrint}
+            >
+              <Bluetooth size={15} />
+              {btPrinting ? "Mencetak..." : "Bluetooth"}
+            </Button>
+            <Select
+              options={labelSizeOptions}
+              value={labelSizeId}
+              onChange={(e) => setLabelSizeId(e.target.value)}
+              className="w-36"
+            />
           </div>
 
           <Card className="overflow-hidden">

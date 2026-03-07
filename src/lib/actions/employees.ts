@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, sessions, accounts } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/actions/auth-helpers";
@@ -59,3 +59,56 @@ export async function createEmployeeFromOwner(formData: FormData) {
         return { error: e.message || "Gagal membuat karyawan baru" };
     }
 }
+
+/**
+ * Toggle employee banned status. When banning, all sessions are deleted to force logout.
+ */
+export async function toggleEmployeeBan(id: string, banned: boolean, reason?: string) {
+    await requireRole("owner");
+
+    await db.update(users).set({
+        banned,
+        bannedReason: banned ? (reason || "Dinonaktifkan oleh Owner") : null,
+    }).where(eq(users.id, id));
+
+    // If banning, delete all their sessions to force logout
+    if (banned) {
+        await db.delete(sessions).where(eq(sessions.userId, id));
+    }
+
+    revalidatePath("/kontak");
+    revalidatePath("/pengaturan");
+    return { success: true };
+}
+
+/**
+ * Reset employee password. Uses better-auth's internal password hashing.
+ */
+export async function resetEmployeePassword(id: string, newPassword: string) {
+    await requireRole("owner");
+
+    if (!newPassword || newPassword.length < 8) {
+        return { error: "Password minimal 8 karakter" };
+    }
+
+    try {
+        // Hash the password using better-auth's built-in hashing
+        const { hashPassword } = await import("better-auth/crypto");
+        const hashedPassword = await hashPassword(newPassword);
+
+        // Update in accounts table (where better-auth stores passwords)
+        await db.update(accounts).set({
+            password: hashedPassword,
+        }).where(eq(accounts.userId, id));
+
+        // Also delete all sessions to force re-login
+        await db.delete(sessions).where(eq(sessions.userId, id));
+
+        revalidatePath("/kontak");
+        return { success: true };
+    } catch (e: any) {
+        console.error("Gagal reset password:", e);
+        return { error: e.message || "Gagal mereset password karyawan" };
+    }
+}
+

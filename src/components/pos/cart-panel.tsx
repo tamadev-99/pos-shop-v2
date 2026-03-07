@@ -48,6 +48,7 @@ interface CartPanelProps {
   taxName?: string;
   calculatedSubtotal?: number;
   calculatedTotal?: number;
+  isAutoPromo?: boolean;
 }
 
 export function CartPanel({
@@ -79,6 +80,7 @@ export function CartPanel({
   taxName = "PPN",
   calculatedSubtotal = 0,
   calculatedTotal = 0,
+  isAutoPromo = false,
 }: CartPanelProps) {
   const customerOptions = [
     { label: "Pelanggan Umum", value: "" },
@@ -228,6 +230,11 @@ export function CartPanel({
                   placeholder="Pilih promo"
                   className="text-[11px] flex-1"
                 />
+                {isAutoPromo && (
+                  <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-accent/10 border border-accent/20 text-accent text-[9px] font-semibold uppercase tracking-wider">
+                    Otomatis
+                  </span>
+                )}
               </div>
             )}
 

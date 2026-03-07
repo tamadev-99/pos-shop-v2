@@ -12,6 +12,7 @@ export interface VariantRow {
   color: string;
   size: string;
   sku: string;
+  barcode: string;
   stock: number;
   buyPrice: number;
   sellPrice: number;
@@ -216,15 +217,18 @@ function AddCustomTag({ placeholder, onAdd }: AddCustomTagProps) {
   );
 }
 
+import { BarcodeScannerDialog } from "@/components/pos/barcode-scanner";
+
 // ─── Variant Table Row ────────────────────────────────────────────────────────
 
 interface VariantTableRowProps {
   row: VariantRow;
   index: number;
   onChange: (index: number, field: keyof VariantRow, value: string | number) => void;
+  onScanBarcode: (index: number) => void;
 }
 
-function VariantTableRow({ row, index, onChange }: VariantTableRowProps) {
+function VariantTableRow({ row, index, onChange, onScanBarcode }: VariantTableRowProps) {
   return (
     <tr className="border-b border-border hover:bg-surface transition-colors duration-150 group">
       {/* Color dot + label */}
@@ -257,6 +261,33 @@ function VariantTableRow({ row, index, onChange }: VariantTableRowProps) {
             "focus:bg-surface transition-all duration-200"
           )}
         />
+      </td>
+
+      {/* Barcode — editable */}
+      <td className="px-2 py-2">
+        <div className="flex items-center gap-1">
+          <input
+            value={row.barcode}
+            onChange={(e) => onChange(index, "barcode", e.target.value)}
+            placeholder="Opsional"
+            className={cn(
+              "w-full h-7 px-2 rounded-lg text-[11px] font-num text-foreground",
+              "bg-card border border-border",
+              "placeholder:text-muted-dim",
+              "focus:outline-none focus:border-accent/30 focus:ring-1 focus:ring-accent/15",
+              "focus:bg-surface transition-all duration-200"
+            )}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 shrink-0 bg-card border-border hover:bg-accent/10 hover:text-accent hover:border-accent/30"
+            onClick={() => onScanBarcode(index)}
+          >
+            <Layers size={12} />
+          </Button>
+        </div>
       </td>
 
       {/* Stock */}
@@ -338,6 +369,9 @@ export function VariantBuilder({
   // Internal variant state — keyed by "color||size" to persist edits across re-renders
   const [variantMap, setVariantMap] = useState<Record<string, VariantRow>>({});
 
+  // Scanner state
+  const [scanningRowIndex, setScanningRowIndex] = useState<number | null>(null);
+
   // ── Derived matrix ────────────────────────────────────────────────────────
 
   const matrix: VariantRow[] = (() => {
@@ -352,6 +386,7 @@ export function VariantBuilder({
             color,
             size,
             sku: buildSku(skuPrefix, color, size),
+            barcode: "",
             stock: 0,
             buyPrice: 0,
             sellPrice: 0,
@@ -459,7 +494,7 @@ export function VariantBuilder({
         [key]: { ...row, ...prev[key], [field]: value },
       }));
     },
-     
+
     [matrix]
   );
 
@@ -618,7 +653,7 @@ export function VariantBuilder({
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-border bg-surface">
-                  {["Warna", "Ukuran", "SKU", "Stok", "H. Beli", "H. Jual"].map(
+                  {["Warna", "Ukuran", "SKU", "Barcode", "Stok", "H. Beli", "H. Jual"].map(
                     (heading) => (
                       <th
                         key={heading}
@@ -637,6 +672,7 @@ export function VariantBuilder({
                     row={row}
                     index={i}
                     onChange={handleRowChange}
+                    onScanBarcode={setScanningRowIndex}
                   />
                 ))}
               </tbody>
@@ -669,6 +705,19 @@ export function VariantBuilder({
           </p>
         </div>
       )}
+
+      {/* Barcode Scanner Dialog */}
+      <BarcodeScannerDialog
+        open={scanningRowIndex !== null}
+        onClose={() => setScanningRowIndex(null)}
+        onScan={(barcode) => {
+          if (scanningRowIndex !== null) {
+            handleRowChange(scanningRowIndex, "barcode", barcode);
+            setScanningRowIndex(null);
+          }
+        }}
+        lastResult={null}
+      />
     </div>
   );
 }

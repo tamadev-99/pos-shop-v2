@@ -1,6 +1,6 @@
 # Panduan Penggunaan KasirPro (POS v2)
 
-Selamat datang di panduan resmi penggunaan sistem KasirPro v2. Dokumen ini menjelaskan cara menggunakan berbagai fitur yang tersedia di dalam aplikasi kasir dan _backoffice_ ini.
+Selamat datang di panduan resmi penggunaan sistem KasirPro v2. Dokumen ini menjelaskan cara menggunakan berbagai fitur yang tersedia di dalam aplikasi kasir dan backoffice ini.
 
 ---
 

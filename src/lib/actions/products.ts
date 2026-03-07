@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { products, productVariants, categories } from "@/db/schema";
+import { products, productVariants, categories, bundleItems } from "@/db/schema";
 import { eq, like, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
@@ -37,6 +37,15 @@ export async function getProducts(filters?: {
       with: {
         variants: true,
         category: true,
+        bundleItems: {
+          with: {
+            componentVariant: {
+              with: {
+                product: true,
+              },
+            },
+          },
+        },
       },
       orderBy: [desc(products.createdAt)],
       limit: filters?.limit || 10,
@@ -61,6 +70,15 @@ export async function getProductById(id: string) {
     with: {
       variants: true,
       category: true,
+      bundleItems: {
+        with: {
+          componentVariant: {
+            with: {
+              product: true,
+            },
+          },
+        },
+      },
     },
   });
 }
@@ -85,6 +103,7 @@ export async function createProduct(data: {
   description?: string;
   basePrice: number;
   baseCost: number;
+  isBundle?: boolean;
   variants?: {
     sku: string;
     barcode: string;
@@ -94,6 +113,10 @@ export async function createProduct(data: {
     minStock: number;
     buyPrice: number;
     sellPrice: number;
+  }[];
+  bundleComponents?: {
+    componentVariantId: string;
+    quantity: number;
   }[];
 }) {
   await requireRole("manager", "owner");
@@ -108,6 +131,7 @@ export async function createProduct(data: {
     description: data.description || "",
     basePrice: data.basePrice,
     baseCost: data.baseCost,
+    isBundle: data.isBundle || false,
   });
 
   if (data.variants && data.variants.length > 0) {
@@ -129,6 +153,18 @@ export async function createProduct(data: {
 
   revalidatePath("/produk");
   revalidatePath("/pos");
+
+  // Insert bundle components if this is a bundle product
+  if (data.isBundle && data.bundleComponents && data.bundleComponents.length > 0) {
+    await db.insert(bundleItems).values(
+      data.bundleComponents.map((comp) => ({
+        id: crypto.randomUUID(),
+        bundleId: productId,
+        componentVariantId: comp.componentVariantId,
+        quantity: comp.quantity,
+      }))
+    );
+  }
 
   const currentUser = await getCurrentUser();
   createAuditLog({
@@ -153,13 +189,32 @@ export async function updateProduct(
     basePrice: number;
     baseCost: number;
     status: "aktif" | "nonaktif";
-  }>
+    isBundle: boolean;
+  }>,
+  newBundleComponents?: { componentVariantId: string; quantity: number }[]
 ) {
   await requireRole("manager", "owner");
   await db
     .update(products)
     .set({ ...data, updatedAt: new Date() })
     .where(eq(products.id, id));
+
+  // If bundle components are provided, replace them
+  if (newBundleComponents) {
+    // Delete old bundle items
+    await db.delete(bundleItems).where(eq(bundleItems.bundleId, id));
+    // Insert new ones
+    if (newBundleComponents.length > 0) {
+      await db.insert(bundleItems).values(
+        newBundleComponents.map((comp) => ({
+          id: crypto.randomUUID(),
+          bundleId: id,
+          componentVariantId: comp.componentVariantId,
+          quantity: comp.quantity,
+        }))
+      );
+    }
+  }
 
   revalidatePath("/produk");
   revalidatePath("/pos");

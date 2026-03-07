@@ -561,3 +561,117 @@ export function disconnectBluetooth(): void {
   cachedBtDevice = null;
   cachedBtCharacteristic = null;
 }
+
+// ── Label Size Presets ────────────────────────────────────────────────────────
+export interface LabelSize {
+  id: string;
+  label: string;
+  widthMm: number;
+  heightMm: number;
+}
+
+export const LABEL_PRESETS: LabelSize[] = [
+  { id: "40x30", label: "40 × 30 mm", widthMm: 40, heightMm: 30 },
+  { id: "50x25", label: "50 × 25 mm", widthMm: 50, heightMm: 25 },
+  { id: "50x30", label: "50 × 30 mm", widthMm: 50, heightMm: 30 },
+  { id: "60x40", label: "60 × 40 mm", widthMm: 60, heightMm: 40 },
+];
+
+/**
+ * Convert an HTMLCanvasElement to ESC/POS raster bitmap commands (GS v 0).
+ * The canvas is resized to fit the thermal printer's dot width.
+ *
+ * Thermal printers typically have 8 dots/mm (203 DPI).
+ * So 58mm paper ≈ 384 dots wide, 80mm paper ≈ 576 dots wide.
+ *
+ * For label printing, we scale the canvas to fit the label width in dots,
+ * then convert each pixel row to bytes (8 pixels per byte, MSB first).
+ */
+export function buildBarcodeLabelCommands(
+  sourceCanvas: HTMLCanvasElement,
+  paperWidth: "58" | "80" = "58"
+): Uint8Array {
+  const DPI = 8; // dots per mm for most thermal printers
+  const maxWidthDots = paperWidth === "80" ? 576 : 384;
+
+  // Scale canvas to fit printer width
+  const scale = maxWidthDots / sourceCanvas.width;
+  const printW = maxWidthDots;
+  const printH = Math.round(sourceCanvas.height * scale);
+
+  // Create a scaled canvas
+  const printCanvas = document.createElement("canvas");
+  printCanvas.width = printW;
+  printCanvas.height = printH;
+  const pCtx = printCanvas.getContext("2d")!;
+  pCtx.fillStyle = "#fff";
+  pCtx.fillRect(0, 0, printW, printH);
+  pCtx.drawImage(sourceCanvas, 0, 0, printW, printH);
+
+  // Get pixel data
+  const imageData = pCtx.getImageData(0, 0, printW, printH);
+  const pixels = imageData.data; // RGBA
+
+  // Width in bytes (8 pixels per byte)
+  const bytesPerRow = Math.ceil(printW / 8);
+
+  // Convert to monochrome bitmap rows
+  const bitmapRows: number[][] = [];
+  for (let y = 0; y < printH; y++) {
+    const row: number[] = [];
+    for (let byteIdx = 0; byteIdx < bytesPerRow; byteIdx++) {
+      let byte = 0;
+      for (let bit = 0; bit < 8; bit++) {
+        const x = byteIdx * 8 + bit;
+        if (x < printW) {
+          const pixelOffset = (y * printW + x) * 4;
+          const r = pixels[pixelOffset];
+          const g = pixels[pixelOffset + 1];
+          const b = pixels[pixelOffset + 2];
+          // Convert to grayscale and threshold (< 128 = black = 1)
+          const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+          if (gray < 128) {
+            byte |= (0x80 >> bit); // MSB first
+          }
+        }
+      }
+      row.push(byte);
+    }
+    bitmapRows.push(row);
+  }
+
+  // Build ESC/POS commands
+  const cmds: number[] = [];
+
+  // Initialize
+  cmds.push(...CMD.INIT);
+
+  // Set line spacing to 0 for continuous image
+  cmds.push(ESC, 0x33, 0x00); // ESC 3 n — set line spacing to n dots
+
+  // Center align
+  cmds.push(...CMD.ALIGN_CENTER);
+
+  // Print using GS v 0 — raster bit image
+  // GS v 0 m xL xH yL yH d1...dk
+  // m = 0: normal, 1: double-width, 2: double-height, 3: double both
+  const xL = bytesPerRow & 0xff;
+  const xH = (bytesPerRow >> 8) & 0xff;
+  const yL = printH & 0xff;
+  const yH = (printH >> 8) & 0xff;
+
+  cmds.push(GS, 0x76, 0x30, 0x00, xL, xH, yL, yH);
+
+  // Append all bitmap data
+  for (const row of bitmapRows) {
+    cmds.push(...row);
+  }
+
+  // Reset line spacing
+  cmds.push(ESC, 0x32); // ESC 2 — default line spacing
+
+  // Feed and cut
+  cmds.push(...CMD.FEED_3, ...CMD.CUT);
+
+  return new Uint8Array(cmds);
+}

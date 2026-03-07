@@ -5,6 +5,8 @@ import {
   orders,
   orderItems,
   productVariants,
+  products,
+  bundleItems,
   customers,
   financialTransactions,
   heldTransactions,
@@ -100,12 +102,35 @@ export async function createOrder(data: CreateOrderParams) {
     }))
   );
 
-  // Deduct stock for each variant
+  // Deduct stock for each variant (bundle-aware)
   for (const item of data.items) {
-    await db
-      .update(productVariants)
-      .set({ stock: sql`${productVariants.stock} - ${item.qty}` })
-      .where(eq(productVariants.id, item.variantId));
+    // Check if this variant belongs to a bundle product
+    const variantWithProduct = await db.query.productVariants.findFirst({
+      where: eq(productVariants.id, item.variantId),
+      with: {
+        product: {
+          with: {
+            bundleItems: true,
+          },
+        },
+      },
+    });
+
+    if (variantWithProduct?.product?.isBundle && variantWithProduct.product.bundleItems.length > 0) {
+      // Bundle product: deduct stock from each component variant
+      for (const comp of variantWithProduct.product.bundleItems) {
+        await db
+          .update(productVariants)
+          .set({ stock: sql`${productVariants.stock} - ${item.qty * comp.quantity}` })
+          .where(eq(productVariants.id, comp.componentVariantId));
+      }
+    } else {
+      // Regular product: deduct stock normally
+      await db
+        .update(productVariants)
+        .set({ stock: sql`${productVariants.stock} - ${item.qty}` })
+        .where(eq(productVariants.id, item.variantId));
+    }
   }
 
   // Update customer spending & points

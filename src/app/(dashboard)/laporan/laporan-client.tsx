@@ -16,9 +16,10 @@ import { formatRupiah, formatNumber, cn } from "@/lib/utils";
 import { getDailySalesReport, getMonthlySalesReport } from "@/lib/actions/reports";
 import { getProfitLossReport } from "@/lib/actions/finance";
 import { toast } from "sonner";
-import { Loader2, Download } from "lucide-react";
+import { Loader2, Download, FileSpreadsheet } from "lucide-react";
 import { KeuanganTab, type KeuanganTabProps } from "./keuangan-tab";
 import { exportToCSV } from "@/lib/export-csv";
+import { exportToExcel } from "@/lib/export-excel";
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -418,7 +419,25 @@ function PenjualanTab({
             }}
           >
             <Download size={14} />
-            Export CSV
+            CSV
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const data = dayLabels.map((day, i) => ({
+                Hari: day,
+                Penjualan: dailySales[i] || 0,
+              }));
+              exportToExcel(data, "penjualan_harian", [
+                { key: "Hari", label: "Hari" },
+                { key: "Penjualan", label: "Penjualan (Rp)" },
+              ]);
+              toast.success("Data diexport ke Excel");
+            }}
+          >
+            <FileSpreadsheet size={14} />
+            Excel
           </Button>
         </CardHeader>
         <CardContent>
@@ -500,30 +519,56 @@ function ProdukTab({
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Produk Terlaris</CardTitle>
         {bestSellers.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              const data = bestSellers.map((p, i) => ({
-                Rank: i + 1,
-                Produk: p.productName,
-                QtyTerjual: p.totalQty,
-                Revenue: p.totalRevenue,
-                PersenTotal: totalQty > 0 ? ((p.totalQty / totalQty) * 100).toFixed(1) + "%" : "0%",
-              }));
-              exportToCSV(data, "produk_terlaris", [
-                { key: "Rank", label: "#" },
-                { key: "Produk", label: "Nama Produk" },
-                { key: "QtyTerjual", label: "Qty Terjual" },
-                { key: "Revenue", label: "Revenue (Rp)" },
-                { key: "PersenTotal", label: "% dari Total" },
-              ]);
-              toast.success("Data produk terlaris diexport ke CSV");
-            }}
-          >
-            <Download size={14} />
-            Export CSV
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const data = bestSellers.map((p, i) => ({
+                  Rank: i + 1,
+                  Produk: p.productName,
+                  QtyTerjual: p.totalQty,
+                  Revenue: p.totalRevenue,
+                  PersenTotal: totalQty > 0 ? ((p.totalQty / totalQty) * 100).toFixed(1) + "%" : "0%",
+                }));
+                exportToCSV(data, "produk_terlaris", [
+                  { key: "Rank", label: "#" },
+                  { key: "Produk", label: "Nama Produk" },
+                  { key: "QtyTerjual", label: "Qty Terjual" },
+                  { key: "Revenue", label: "Revenue (Rp)" },
+                  { key: "PersenTotal", label: "% dari Total" },
+                ]);
+                toast.success("Data produk terlaris diexport ke CSV");
+              }}
+            >
+              <Download size={14} />
+              CSV
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const data = bestSellers.map((p, i) => ({
+                  Rank: i + 1,
+                  Produk: p.productName,
+                  QtyTerjual: p.totalQty,
+                  Revenue: p.totalRevenue,
+                  PersenTotal: totalQty > 0 ? ((p.totalQty / totalQty) * 100).toFixed(1) + "%" : "0%",
+                }));
+                exportToExcel(data, "produk_terlaris", [
+                  { key: "Rank", label: "#" },
+                  { key: "Produk", label: "Nama Produk" },
+                  { key: "QtyTerjual", label: "Qty Terjual" },
+                  { key: "Revenue", label: "Revenue (Rp)" },
+                  { key: "PersenTotal", label: "% dari Total" },
+                ]);
+                toast.success("Data diexport ke Excel");
+              }}
+            >
+              <FileSpreadsheet size={14} />
+              Excel
+            </Button>
+          </>
         )}
       </CardHeader>
       <CardContent className="p-0">
@@ -683,7 +728,32 @@ function LabaRugiTab({
               }}
             >
               <Download size={14} />
-              Export CSV
+              CSV
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (!plReport) return;
+                const data = [
+                  { Item: "Total Pesanan", Nilai: plReport.orderCount },
+                  { Item: "Pendapatan Kotor", Nilai: plReport.grossRevenue },
+                  { Item: "Diskon", Nilai: -plReport.totalDiscounts },
+                  { Item: "Pendapatan Bersih", Nilai: plReport.netRevenue },
+                  { Item: "HPP (Harga Pokok Penjualan)", Nilai: -plReport.totalCOGS },
+                  { Item: "Laba Kotor", Nilai: plReport.grossProfit },
+                  { Item: "Total Beban", Nilai: -plReport.totalExpenses },
+                  { Item: "Laba Bersih", Nilai: plReport.netProfit },
+                ];
+                exportToExcel(data, `laba_rugi_${startDate}_${endDate}`, [
+                  { key: "Item", label: "Item" },
+                  { key: "Nilai", label: "Nilai (Rp)" },
+                ]);
+                toast.success("Laporan diexport ke Excel");
+              }}
+            >
+              <FileSpreadsheet size={14} />
+              Excel
             </Button>
           </CardHeader>
           <CardContent>

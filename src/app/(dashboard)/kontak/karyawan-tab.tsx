@@ -10,10 +10,13 @@ import {
     ShieldAlert,
     Search,
     CheckCircle2,
+    Ban,
+    KeyRound,
+    ShieldCheck,
 } from "lucide-react";
 import { useState, useMemo, useTransition } from "react";
 import { toast } from "sonner";
-import { updateEmployeeRole, createEmployeeFromOwner } from "@/lib/actions/employees";
+import { updateEmployeeRole, createEmployeeFromOwner, toggleEmployeeBan, resetEmployeePassword } from "@/lib/actions/employees";
 import { Input } from "@/components/ui/input";
 import {
     Dialog,
@@ -30,6 +33,8 @@ interface EmployeeData {
     name: string;
     email: string;
     role: "owner" | "manager" | "cashier" | string | null;
+    banned?: boolean;
+    bannedReason?: string | null;
     createdAt: Date;
 }
 
@@ -59,6 +64,13 @@ export function KaryawanTab({ initialEmployees }: KaryawanTabProps) {
     const [formRole, setFormRole] = useState("cashier");
     const [isAdding, setIsAdding] = useState(false);
 
+    // Ban/Reset password state
+    const [resetOpen, setResetOpen] = useState(false);
+    const [resetTargetId, setResetTargetId] = useState("");
+    const [resetTargetName, setResetTargetName] = useState("");
+    const [resetPassword, setResetPassword] = useState("");
+    const [isResetting, setIsResetting] = useState(false);
+
     const handleUpdateRole = (id: string, newRole: string) => {
         // Validate role is one of expected
         if (!["owner", "manager", "cashier"].includes(newRole)) return;
@@ -78,6 +90,48 @@ export function KaryawanTab({ initialEmployees }: KaryawanTabProps) {
                 setEmployees(initialEmployees);
             }
         });
+    };
+
+    const handleToggleBan = async (emp: EmployeeData) => {
+        const newBanned = !emp.banned;
+        // Optimistic update
+        setEmployees(prev =>
+            prev.map(e => e.id === emp.id ? { ...e, banned: newBanned, bannedReason: newBanned ? "Dinonaktifkan oleh Owner" : null } : e)
+        );
+        startTransition(async () => {
+            try {
+                await toggleEmployeeBan(emp.id, newBanned);
+                toast.success(newBanned ? `${emp.name} dinonaktifkan` : `${emp.name} diaktifkan kembali`);
+            } catch {
+                toast.error("Gagal mengubah status karyawan");
+                setEmployees(initialEmployees);
+            }
+        });
+    };
+
+    const openResetDialog = (emp: EmployeeData) => {
+        setResetTargetId(emp.id);
+        setResetTargetName(emp.name);
+        setResetPassword("");
+        setResetOpen(true);
+    };
+
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsResetting(true);
+        try {
+            const result = await resetEmployeePassword(resetTargetId, resetPassword);
+            if (result.error) {
+                toast.error(result.error);
+            } else {
+                toast.success(`Password ${resetTargetName} berhasil direset`);
+                setResetOpen(false);
+            }
+        } catch {
+            toast.error("Gagal mereset password");
+        } finally {
+            setIsResetting(false);
+        }
     };
 
     const filteredEmployees = useMemo(() => {
@@ -206,7 +260,8 @@ export function KaryawanTab({ initialEmployees }: KaryawanTabProps) {
                                 <th className="px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">Karyawan</th>
                                 <th className="px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">Email</th>
                                 <th className="px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">Bergabung</th>
-                                <th className="px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider w-[240px]">Role Sistem</th>
+                                <th className="px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider w-[180px]">Role Sistem</th>
+                                {isOwner && <th className="px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider w-[160px]">Aksi</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -221,10 +276,13 @@ export function KaryawanTab({ initialEmployees }: KaryawanTabProps) {
                                     <tr key={emp.id} className="border-b border-border hover:bg-white/[0.025] transition-all">
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center shrink-0">
-                                                    <User size={14} className="text-muted-foreground" />
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${emp.banned ? 'bg-destructive/10' : 'bg-surface'}`}>
+                                                    <User size={14} className={emp.banned ? 'text-destructive/60' : 'text-muted-foreground'} />
                                                 </div>
-                                                <span className="text-sm font-medium text-foreground">{emp.name}</span>
+                                                <div className="flex flex-col">
+                                                    <span className={`text-sm font-medium ${emp.banned ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{emp.name}</span>
+                                                    {emp.banned && <Badge variant="destructive" className="mt-0.5 w-fit text-[9px] px-1.5 py-0">Nonaktif</Badge>}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-4 py-3 text-sm text-muted-foreground">{emp.email}</td>
@@ -238,11 +296,46 @@ export function KaryawanTab({ initialEmployees }: KaryawanTabProps) {
                                                 options={roleOptions}
                                                 value={emp.role || "cashier"}
                                                 onValueChange={(val) => handleUpdateRole(emp.id, val)}
-                                                disabled={isPending}
+                                                disabled={isPending || emp.banned}
                                             />
                                         </td>
+                                        {isOwner && (
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-1">
+                                                    {emp.id !== user?.id && (
+                                                        <>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                title={emp.banned ? "Aktifkan Kembali" : "Nonaktifkan"}
+                                                                onClick={() => handleToggleBan(emp)}
+                                                                disabled={isPending}
+                                                            >
+                                                                {emp.banned ? <ShieldCheck size={14} className="text-accent" /> : <Ban size={14} className="text-destructive/60" />}
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                title="Reset Password"
+                                                                onClick={() => openResetDialog(emp)}
+                                                                disabled={isPending}
+                                                            >
+                                                                <KeyRound size={14} className="text-amber-400" />
+                                                            </Button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))
+                            )}
+                            {filteredEmployees.length === 0 && (
+                                <tr>
+                                    <td colSpan={isOwner ? 5 : 4} className="py-10 text-center text-sm text-muted-foreground">
+                                        Tidak ada data karyawan ditemukan.
+                                    </td>
+                                </tr>
                             )}
                         </tbody>
                     </table>
@@ -305,6 +398,39 @@ export function KaryawanTab({ initialEmployees }: KaryawanTabProps) {
                         </Button>
                         <Button type="submit" disabled={isAdding}>
                             {isAdding ? "Menyimpan..." : "Tambah Karyawan"}
+                        </Button>
+                    </div>
+                </form>
+            </Dialog>
+
+            {/* Reset Password Dialog */}
+            <Dialog open={resetOpen} onClose={() => setResetOpen(false)}>
+                <DialogClose onClose={() => setResetOpen(false)} />
+                <DialogHeader>
+                    <DialogTitle>Reset Password: {resetTargetName}</DialogTitle>
+                </DialogHeader>
+
+                <form onSubmit={handleResetPassword} className="space-y-4 mt-2">
+                    <p className="text-xs text-muted-foreground">
+                        Masukkan password baru untuk karyawan ini. Mereka akan otomatis logout dari semua perangkat.
+                    </p>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold">Password Baru</label>
+                        <Input
+                            required
+                            type="password"
+                            placeholder="Minimal 8 karakter"
+                            minLength={8}
+                            value={resetPassword}
+                            onChange={(e) => setResetPassword(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-4">
+                        <Button type="button" variant="ghost" onClick={() => setResetOpen(false)}>
+                            Batal
+                        </Button>
+                        <Button type="submit" disabled={isResetting}>
+                            {isResetting ? "Mereset..." : "Reset Password"}
                         </Button>
                     </div>
                 </form>

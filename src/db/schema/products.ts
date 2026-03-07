@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, pgEnum, varchar, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, pgEnum, varchar, boolean } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const productStatusEnum = pgEnum("product_status", ["aktif", "nonaktif"]);
@@ -20,6 +20,7 @@ export const products = pgTable("products", {
   description: text("description").default(""),
   basePrice: integer("base_price").notNull(),
   baseCost: integer("base_cost").notNull(),
+  isBundle: boolean("is_bundle").notNull().default(false),
   status: productStatusEnum("status").notNull().default("aktif"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -40,6 +41,14 @@ export const productVariants = pgTable("product_variants", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const bundleItems = pgTable("bundle_items", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bundleId: text("bundle_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  componentVariantId: text("component_variant_id").notNull().references(() => productVariants.id, { onDelete: "restrict" }),
+  quantity: integer("quantity").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Relations
 export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
@@ -51,11 +60,24 @@ export const productsRelations = relations(products, ({ one, many }) => ({
     references: [categories.id],
   }),
   variants: many(productVariants),
+  bundleItems: many(bundleItems),
 }));
 
-export const productVariantsRelations = relations(productVariants, ({ one }) => ({
+export const productVariantsRelations = relations(productVariants, ({ one, many }) => ({
   product: one(products, {
     fields: [productVariants.productId],
     references: [products.id],
+  }),
+  bundleItems: many(bundleItems),
+}));
+
+export const bundleItemsRelations = relations(bundleItems, ({ one }) => ({
+  bundle: one(products, {
+    fields: [bundleItems.bundleId],
+    references: [products.id],
+  }),
+  componentVariant: one(productVariants, {
+    fields: [bundleItems.componentVariantId],
+    references: [productVariants.id],
   }),
 }));

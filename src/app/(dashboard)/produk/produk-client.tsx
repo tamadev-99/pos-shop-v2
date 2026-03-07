@@ -12,13 +12,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, cn } from "@/lib/utils";
 import { VariantTable } from "@/components/produk/variant-table";
+import { BarcodeScannerDialog } from "@/components/pos/barcode-scanner";
 import {
   VariantBuilder,
   type VariantRow,
 } from "@/components/produk/variant-builder";
-import { updateProduct, createProduct, getProducts } from "@/lib/actions/products";
+import { updateProduct, createProduct, getProducts, getAllVariantsFlat } from "@/lib/actions/products";
 import { StokTab } from "./stok-tab";
 import { KategoriTab } from "./kategori-tab";
 import { toast } from "sonner";
@@ -31,6 +32,9 @@ import {
   Package,
   Eye,
   ChevronDown,
+  ScanLine,
+  PackageOpen,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -75,9 +79,23 @@ interface DBProduct {
   description: string | null;
   basePrice: number;
   baseCost: number;
+  isBundle: boolean;
   status: "aktif" | "nonaktif";
   category: DBCategory | null;
   variants: DBVariant[];
+  bundleItems?: {
+    id: string;
+    bundleId: string;
+    componentVariantId: string;
+    quantity: number;
+    componentVariant?: {
+      id: string;
+      color: string;
+      size: string;
+      stock: number;
+      product?: { name: string };
+    };
+  }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -137,10 +155,24 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
   const [formBasePrice, setFormBasePrice] = useState("");
   const [formBaseCost, setFormBaseCost] = useState("");
 
-  // Variant builder state
+  // Product type state: "single" | "variant" | "bundle"
+  const [productType, setProductType] = useState<"single" | "variant" | "bundle">("single");
   const [formColors, setFormColors] = useState<string[]>([]);
   const [formSizes, setFormSizes] = useState<string[]>([]);
   const [formVariants, setFormVariants] = useState<VariantRow[]>([]);
+
+  // Single variant state
+  const [formSingleBarcode, setFormSingleBarcode] = useState("");
+  const [formSingleStock, setFormSingleStock] = useState("");
+  const [singleScanning, setSingleScanning] = useState(false);
+
+  // Bundle state
+  const [bundleComponents, setBundleComponents] = useState<{ variantId: string; variantLabel: string; quantity: number }[]>([]);
+  const [bundleBarcode, setBundleBarcode] = useState("");
+  const [bundleSearchQuery, setBundleSearchQuery] = useState("");
+  const [bundleSearchResults, setBundleSearchResults] = useState<any[]>([]);
+  const [bundleSearching, setBundleSearching] = useState(false);
+  const [bundleScanning, setBundleScanning] = useState(false);
 
   // Build category tabs dynamically
   const mainTabOptions = [
@@ -207,9 +239,16 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
     setFormDescription("");
     setFormBasePrice("");
     setFormBaseCost("");
+    setProductType("single");
     setFormColors([]);
     setFormSizes([]);
     setFormVariants([]);
+    setFormSingleBarcode("");
+    setFormSingleStock("");
+    setBundleComponents([]);
+    setBundleBarcode("");
+    setBundleSearchQuery("");
+    setBundleSearchResults([]);
     setEditProduct(null);
   }
 
@@ -223,9 +262,34 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
       setFormDescription(product.description || "");
       setFormBasePrice(String(product.basePrice));
       setFormBaseCost(String(product.baseCost));
+
+      // Detect product type
+      if (product.isBundle && (product as any).bundleItems?.length > 0) {
+        setProductType("bundle");
+        setBundleComponents(
+          ((product as any).bundleItems || []).map((bi: any) => ({
+            variantId: bi.componentVariantId || bi.componentVariant?.id,
+            variantLabel: bi.componentVariant
+              ? `${bi.componentVariant.product?.name || ""} — ${bi.componentVariant.color}/${bi.componentVariant.size}`
+              : bi.componentVariantId,
+            quantity: bi.quantity,
+          }))
+        );
+        setBundleBarcode(product.variants?.[0]?.barcode || "");
+      } else if (product.variants && product.variants.length > 1) {
+        setProductType("variant");
+        setBundleComponents([]);
+        setBundleBarcode("");
+      } else {
+        setProductType("single");
+        setBundleComponents([]);
+        setBundleBarcode("");
+      }
       setFormColors([]);
       setFormSizes([]);
       setFormVariants([]);
+      setFormSingleBarcode("");
+      setFormSingleStock("");
     } else {
       resetForm();
     }
@@ -238,6 +302,13 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
 
     try {
       if (editProduct) {
+        const bundleComponentsToSave = productType === "bundle"
+          ? bundleComponents.map((c) => ({
+            componentVariantId: c.variantId,
+            quantity: c.quantity,
+          }))
+          : undefined;
+
         await updateProduct(editProduct.id, {
           name: formName,
           brand: formBrand,
@@ -246,19 +317,53 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
           description: formDescription,
           basePrice: parseInt(formBasePrice) || 0,
           baseCost: parseInt(formBaseCost) || 0,
-        });
+          isBundle: productType === "bundle",
+        }, bundleComponentsToSave);
         toast.success("Produk berhasil diperbarui");
       } else {
-        const variants = formVariants.map((v) => ({
-          sku: v.sku,
-          barcode: `${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-          color: v.color,
-          size: v.size,
-          stock: v.stock,
-          minStock: 5,
-          buyPrice: v.buyPrice,
-          sellPrice: v.sellPrice,
-        }));
+        let variantsToSave;
+        let isBundle = false;
+        let bundleComponentsToSave: { componentVariantId: string; quantity: number }[] | undefined;
+
+        if (productType === "variant") {
+          variantsToSave = formVariants.map((v) => ({
+            sku: v.sku,
+            barcode: v.barcode && v.barcode.trim() !== "" ? v.barcode.trim() : `${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+            color: v.color,
+            size: v.size,
+            stock: v.stock,
+            minStock: 5,
+            buyPrice: v.buyPrice,
+            sellPrice: v.sellPrice,
+          }));
+        } else if (productType === "bundle") {
+          isBundle = true;
+          variantsToSave = [{
+            sku: `BDL-${Date.now().toString().slice(-6)}`,
+            barcode: bundleBarcode.trim() !== "" ? bundleBarcode.trim() : `${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+            color: "-",
+            size: "Paket",
+            stock: 0,
+            minStock: 0,
+            buyPrice: parseInt(formBaseCost) || 0,
+            sellPrice: parseInt(formBasePrice) || 0,
+          }];
+          bundleComponentsToSave = bundleComponents.map((c) => ({
+            componentVariantId: c.variantId,
+            quantity: c.quantity,
+          }));
+        } else {
+          variantsToSave = [{
+            sku: `PRD-${Date.now().toString().slice(-6)}`,
+            barcode: formSingleBarcode.trim() !== "" ? formSingleBarcode.trim() : `${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+            color: "-",
+            size: "Utama",
+            stock: parseInt(formSingleStock) || 0,
+            minStock: 5,
+            buyPrice: parseInt(formBaseCost) || 0,
+            sellPrice: parseInt(formBasePrice) || 0,
+          }];
+        }
 
         await createProduct({
           name: formName,
@@ -268,9 +373,11 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
           description: formDescription,
           basePrice: parseInt(formBasePrice) || 0,
           baseCost: parseInt(formBaseCost) || 0,
-          variants: variants.length > 0 ? variants : undefined,
+          isBundle,
+          variants: variantsToSave.length > 0 ? variantsToSave : undefined,
+          bundleComponents: bundleComponentsToSave,
         });
-        toast.success("Produk berhasil ditambahkan");
+        toast.success(isBundle ? "Produk paket berhasil ditambahkan" : "Produk berhasil ditambahkan");
       }
 
       setFormOpen(false);
@@ -625,7 +732,7 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
               </DialogTitle>
             </DialogHeader>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto px-1">
               {/* Nama & Brand */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -719,22 +826,265 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
                 </div>
               </div>
 
-              {/* Variant Builder - only show for new products */}
+              {/* Product Type Selector - only show for new products */}
               {!editProduct && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <ChevronDown size={14} className="text-muted-dim" />
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Varian Produk
+                <div className="space-y-4 pt-2 border-t border-border">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">
+                      Jenis Produk
                     </label>
+                    <div className="flex gap-2">
+                      {[
+                        { key: "single" as const, label: "Tunggal", icon: <Package size={14} /> },
+                        { key: "variant" as const, label: "Multi Varian", icon: <ChevronDown size={14} /> },
+                        { key: "bundle" as const, label: "Paket / Bundle", icon: <PackageOpen size={14} /> },
+                      ].map((opt) => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => setProductType(opt.key)}
+                          className={cn(
+                            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150",
+                            productType === opt.key
+                              ? "bg-accent text-white shadow-sm"
+                              : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                          )}
+                        >
+                          {opt.icon}
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <VariantBuilder
-                    colors={formColors}
-                    sizes={formSizes}
-                    onColorsChange={setFormColors}
-                    onSizesChange={setFormSizes}
-                    onVariantsChange={setFormVariants}
-                  />
+
+                  {/* Variant Builder (Multi Varian) */}
+                  {productType === "variant" && (
+                    <div className="space-y-2 animate-fade-in">
+                      <VariantBuilder
+                        colors={formColors}
+                        sizes={formSizes}
+                        onColorsChange={setFormColors}
+                        onSizesChange={setFormSizes}
+                        onVariantsChange={setFormVariants}
+                      />
+                    </div>
+                  )}
+
+                  {/* Single Product Inputs */}
+                  {productType === "single" && (
+                    <div className="grid grid-cols-2 gap-3 animate-fade-in">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Stok Awal
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={formSingleStock}
+                          onChange={(e) => setFormSingleStock(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Barcode <span className="text-muted-dim font-normal">(Opsional)</span>
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            placeholder="Scan/Ketik Barcode"
+                            value={formSingleBarcode}
+                            onChange={(e) => setFormSingleBarcode(e.target.value)}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={() => setSingleScanning(true)}
+                          >
+                            <ScanLine size={16} className="text-muted-foreground" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bundle Builder */}
+                  {productType === "bundle" && (
+                    <div className="space-y-3 animate-fade-in">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Barcode Paket <span className="text-muted-dim font-normal">(Opsional)</span>
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            placeholder="Scan/Ketik Barcode Paket"
+                            value={bundleBarcode}
+                            onChange={(e) => setBundleBarcode(e.target.value)}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={() => setBundleScanning(true)}
+                          >
+                            <ScanLine size={16} className="text-muted-foreground" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Component Search */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Cari Produk Komponen
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            placeholder="Ketik nama produk untuk dicari..."
+                            value={bundleSearchQuery}
+                            onChange={(e) => setBundleSearchQuery(e.target.value)}
+                            onKeyDown={async (e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                if (!bundleSearchQuery.trim()) return;
+                                setBundleSearching(true);
+                                try {
+                                  const variants = await getAllVariantsFlat();
+                                  const filtered = variants.filter((v: any) =>
+                                    v.productName.toLowerCase().includes(bundleSearchQuery.toLowerCase()) ||
+                                    v.sku.toLowerCase().includes(bundleSearchQuery.toLowerCase()) ||
+                                    v.barcode.toLowerCase().includes(bundleSearchQuery.toLowerCase())
+                                  );
+                                  setBundleSearchResults(filtered.slice(0, 10));
+                                } catch {
+                                  toast.error("Gagal mencari produk");
+                                } finally {
+                                  setBundleSearching(false);
+                                }
+                              }
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0"
+                            disabled={bundleSearching}
+                            onClick={async () => {
+                              if (!bundleSearchQuery.trim()) return;
+                              setBundleSearching(true);
+                              try {
+                                const variants = await getAllVariantsFlat();
+                                const filtered = variants.filter((v: any) =>
+                                  v.productName.toLowerCase().includes(bundleSearchQuery.toLowerCase()) ||
+                                  v.sku.toLowerCase().includes(bundleSearchQuery.toLowerCase()) ||
+                                  v.barcode.toLowerCase().includes(bundleSearchQuery.toLowerCase())
+                                );
+                                setBundleSearchResults(filtered.slice(0, 10));
+                              } catch {
+                                toast.error("Gagal mencari produk");
+                              } finally {
+                                setBundleSearching(false);
+                              }
+                            }}
+                          >
+                            <Search size={16} className="text-muted-foreground" />
+                          </Button>
+                        </div>
+
+                        {/* Search Results Dropdown */}
+                        {bundleSearchResults.length > 0 && (
+                          <div className="border border-border rounded-lg max-h-40 overflow-y-auto bg-background">
+                            {bundleSearchResults.map((v: any) => {
+                              const alreadyAdded = bundleComponents.some((c) => c.variantId === v.id);
+                              return (
+                                <button
+                                  key={v.id}
+                                  type="button"
+                                  disabled={alreadyAdded}
+                                  onClick={() => {
+                                    setBundleComponents((prev) => [
+                                      ...prev,
+                                      {
+                                        variantId: v.id,
+                                        variantLabel: `${v.productName} — ${v.color}/${v.size} (Stok: ${v.stock})`,
+                                        quantity: 1,
+                                      },
+                                    ]);
+                                    setBundleSearchResults([]);
+                                    setBundleSearchQuery("");
+                                  }}
+                                  className={cn(
+                                    "w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors border-b border-border last:border-b-0",
+                                    alreadyAdded && "opacity-40 cursor-not-allowed"
+                                  )}
+                                >
+                                  <span className="font-medium">{v.productName}</span>
+                                  <span className="text-muted-dim"> — {v.color}/{v.size}</span>
+                                  <span className="text-muted-dim ml-1">(Stok: {v.stock})</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Selected Components Table */}
+                      {bundleComponents.length > 0 && (
+                        <div className="border border-border rounded-lg overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-muted/30 text-muted-foreground">
+                                <th className="text-left px-3 py-1.5 font-medium">Komponen</th>
+                                <th className="text-center px-2 py-1.5 font-medium w-20">Qty</th>
+                                <th className="w-8"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {bundleComponents.map((comp, idx) => (
+                                <tr key={comp.variantId} className="border-t border-border">
+                                  <td className="px-3 py-2 text-foreground">{comp.variantLabel}</td>
+                                  <td className="px-2 py-1">
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      className="text-center h-7 text-xs"
+                                      value={comp.quantity}
+                                      onChange={(e) => {
+                                        setBundleComponents((prev) =>
+                                          prev.map((c, i) =>
+                                            i === idx ? { ...c, quantity: parseInt(e.target.value) || 1 } : c
+                                          )
+                                        );
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="px-1 py-1">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setBundleComponents((prev) => prev.filter((_, i) => i !== idx))
+                                      }
+                                      className="text-red-400 hover:text-red-300 p-1"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {bundleComponents.length === 0 && (
+                        <div className="text-center py-6 text-muted-dim text-xs border border-dashed border-border rounded-lg">
+                          <PackageOpen size={24} className="mx-auto mb-2 opacity-30" />
+                          Cari dan tambahkan produk komponen di atas
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -774,6 +1124,26 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
           <KategoriTab categories={categories as any} />
         </div>
       )}
+      {/* Single Scan Dialog */}
+      <BarcodeScannerDialog
+        open={singleScanning}
+        onClose={() => setSingleScanning(false)}
+        onScan={(barcode) => {
+          setFormSingleBarcode(barcode);
+          setSingleScanning(false);
+        }}
+        lastResult={null}
+      />
+      {/* Bundle Scan Dialog */}
+      <BarcodeScannerDialog
+        open={bundleScanning}
+        onClose={() => setBundleScanning(false)}
+        onScan={(barcode) => {
+          setBundleBarcode(barcode);
+          setBundleScanning(false);
+        }}
+        lastResult={null}
+      />
     </div>
   );
 }
