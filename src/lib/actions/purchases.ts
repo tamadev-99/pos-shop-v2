@@ -136,15 +136,6 @@ export async function updatePOStatus(
             .where(eq(productVariants.id, item.variantId));
         }
       }
-
-      // Fix #10: Record PO expense in financial transactions
-      await db.insert(financialTransactions).values({
-        date: today,
-        type: "keluar",
-        category: "Pembelian",
-        description: `Pembelian ${id} dari ${po.supplierId ? "supplier" : "unknown"}`,
-        amount: po.total,
-      });
     }
   }
 

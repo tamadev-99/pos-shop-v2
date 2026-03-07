@@ -43,6 +43,13 @@
       "when": 1772811648027,
       "tag": "0005_daily_annihilus",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1772875402307,
+      "tag": "0006_huge_harpoon",
+      "breakpoints": true
     }
   ]
 }

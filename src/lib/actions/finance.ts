@@ -178,3 +178,67 @@ export async function getProfitLossReport(startDate: string, endDate: string) {
     orderCount: orderList.length,
   };
 }
+
+export async function getCashFlowReport(startDate: string, endDate: string) {
+  const txList = await db
+    .select()
+    .from(financialTransactions)
+    .where(
+      and(
+        gte(financialTransactions.date, startDate),
+        lte(financialTransactions.date, endDate)
+      )
+    )
+    .orderBy(financialTransactions.date);
+
+  // Group by category + type
+  const inflowByCategory: Record<string, number> = {};
+  const outflowByCategory: Record<string, number> = {};
+  let totalInflow = 0;
+  let totalOutflow = 0;
+
+  // Daily breakdown for chart
+  const dailyMap = new Map<string, { inflow: number; outflow: number }>();
+
+  for (const tx of txList) {
+    if (tx.type === "masuk") {
+      inflowByCategory[tx.category] = (inflowByCategory[tx.category] || 0) + tx.amount;
+      totalInflow += tx.amount;
+    } else {
+      outflowByCategory[tx.category] = (outflowByCategory[tx.category] || 0) + tx.amount;
+      totalOutflow += tx.amount;
+    }
+
+    if (!dailyMap.has(tx.date)) {
+      dailyMap.set(tx.date, { inflow: 0, outflow: 0 });
+    }
+    const day = dailyMap.get(tx.date)!;
+    if (tx.type === "masuk") {
+      day.inflow += tx.amount;
+    } else {
+      day.outflow += tx.amount;
+    }
+  }
+
+  const inflows = Object.entries(inflowByCategory)
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const outflows = Object.entries(outflowByCategory)
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const dailyBreakdown = Array.from(dailyMap.entries())
+    .map(([date, data]) => ({ date, ...data }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    totalInflow,
+    totalOutflow,
+    netCashFlow: totalInflow - totalOutflow,
+    inflows,
+    outflows,
+    dailyBreakdown,
+    transactionCount: txList.length,
+  };
+}

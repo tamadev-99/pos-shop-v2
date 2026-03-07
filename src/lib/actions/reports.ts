@@ -225,16 +225,119 @@ export async function getDashboardStats() {
     penjualan: sales,
   }));
 
+  // ── NEW: Gross Profit (Revenue - COGS) ──
+  let grossProfit = 0;
+  if (todayOrderIds.length > 0) {
+    const profitResult = await db
+      .select({
+        revenue: sql<number>`COALESCE(SUM(${orderItems.subtotal}), 0)::int`,
+        cogs: sql<number>`COALESCE(SUM(${orderItems.costPrice} * ${orderItems.qty}), 0)::int`,
+      })
+      .from(orderItems)
+      .where(
+        sql`${orderItems.orderId} IN (${sql.join(todayOrderIds.map(id => sql`${id}`), sql`, `)})`
+      );
+    grossProfit = (profitResult[0]?.revenue ?? 0) - (profitResult[0]?.cogs ?? 0);
+  }
+
+  // ── NEW: Unique customer count ──
+  const customerSet = new Set<string>();
+  for (const order of todayOrders) {
+    if (order.customerId) customerSet.add(order.customerId);
+  }
+  const uniqueCustomers = customerSet.size;
+
+  // ── NEW: Hourly sales breakdown (24h) ──
+  const hourlySales: { hour: number; sales: number; orders: number }[] = [];
+  const hourMap = new Map<number, { sales: number; orders: number }>();
+  for (let h = 0; h < 24; h++) hourMap.set(h, { sales: 0, orders: 0 });
+  for (const order of todayOrders) {
+    const h = order.date.getHours();
+    const entry = hourMap.get(h)!;
+    entry.sales += order.total;
+    entry.orders += 1;
+  }
+  for (const [hour, data] of hourMap) {
+    hourlySales.push({ hour, ...data });
+  }
+
+  // ── NEW: Monthly sales (6 months) ──
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+  sixMonthsAgo.setDate(1);
+  sixMonthsAgo.setHours(0, 0, 0, 0);
+
+  const monthlyOrders = await db
+    .select({
+      month: sql<string>`TO_CHAR(${orders.date}, 'YYYY-MM')`,
+      totalSales: sql<number>`COALESCE(SUM(${orders.total}), 0)::int`,
+      totalOrders: sql<number>`COUNT(*)::int`,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.status, "selesai"),
+        gte(orders.date, sixMonthsAgo)
+      )
+    )
+    .groupBy(sql`TO_CHAR(${orders.date}, 'YYYY-MM')`)
+    .orderBy(sql`TO_CHAR(${orders.date}, 'YYYY-MM')`);
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+  const monthlySales = monthlyOrders.map((m) => {
+    const [, mm] = m.month.split("-");
+    return {
+      month: monthNames[parseInt(mm) - 1] || m.month,
+      sales: m.totalSales,
+      orders: m.totalOrders,
+    };
+  });
+
+  // ── NEW: Category-level sales ──
+  const categoryResult = await db
+    .select({
+      categoryName: categories.name,
+      totalSales: sql<number>`COALESCE(SUM(${orderItems.subtotal}), 0)::int`,
+      totalQty: sql<number>`COALESCE(SUM(${orderItems.qty}), 0)::int`,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .innerJoin(productVariants, eq(orderItems.variantId, productVariants.id))
+    .innerJoin(products, eq(productVariants.productId, products.id))
+    .innerJoin(categories, eq(products.categoryId, categories.id))
+    .where(
+      and(
+        eq(orders.status, "selesai"),
+        gte(orders.date, weekAgo),
+        lte(orders.date, endOfDay)
+      )
+    )
+    .groupBy(categories.name)
+    .orderBy(desc(sql`SUM(${orderItems.subtotal})`))
+    .limit(8);
+
+  const categorySales = categoryResult.map((c) => ({
+    name: c.categoryName,
+    sales: c.totalSales,
+    qty: c.totalQty,
+  }));
+
   return {
     totalSales,
     totalOrders,
     avgTransaction,
     productsSold,
     weekData,
-    // New: #13 enrichment data
+    // #13 enrichment data
     yesterdaySales,
     yesterdayOrderCount,
     paymentBreakdown,
     lowStockItems,
+    // Dashboard v2 data
+    grossProfit,
+    uniqueCustomers,
+    hourlySales,
+    monthlySales,
+    categorySales,
   };
 }

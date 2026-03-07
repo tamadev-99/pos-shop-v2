@@ -18,8 +18,11 @@ import { getProfitLossReport } from "@/lib/actions/finance";
 import { toast } from "sonner";
 import { Loader2, Download, FileSpreadsheet } from "lucide-react";
 import { KeuanganTab, type KeuanganTabProps } from "./keuangan-tab";
+import { CashFlowTab } from "./cashflow-tab";
 import { exportToCSV } from "@/lib/export-csv";
 import { exportToExcel } from "@/lib/export-excel";
+import { HutangTab } from "./components/hutang-tab";
+import { PajakTab } from "./components/pajak-tab";
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -141,7 +144,10 @@ const TAB_OPTIONS = [
   { label: "Penjualan", value: "penjualan" },
   { label: "Produk", value: "produk" },
   { label: "Laba Rugi", value: "labarugi" },
+  { label: "Arus Kas", value: "aruskas" },
   { label: "Keuangan", value: "keuangan" },
+  { label: "Hutang", value: "hutang" },
+  { label: "Pajak", value: "pajak" },
 ];
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
@@ -367,6 +373,12 @@ export default function LaporanClient({
             onFetch={handleFetchPL}
           />
         )}
+        {activeTab === "aruskas" && (
+          <CashFlowTab
+            initialStartDate={new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0]}
+            initialEndDate={new Date().toISOString().split("T")[0]}
+          />
+        )}
         {activeTab === "keuangan" && (
           <KeuanganTab
             initialTransactions={initialTransactions}
@@ -376,6 +388,12 @@ export default function LaporanClient({
             expenseCategories={expenseCategories}
             recurringExpenses={recurringExpenses}
           />
+        )}
+        {activeTab === "hutang" && (
+          <HutangTab />
+        )}
+        {activeTab === "pajak" && (
+          <PajakTab />
         )}
       </div>
     </div>

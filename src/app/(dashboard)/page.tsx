@@ -4,6 +4,9 @@ import { RecentOrders } from "@/components/dashboard/recent-orders";
 import { TopProducts } from "@/components/dashboard/top-products";
 import { PaymentBreakdown } from "@/components/dashboard/payment-breakdown";
 import { LowStockWarning } from "@/components/dashboard/low-stock-warning";
+import { HourlySales } from "@/components/dashboard/hourly-sales";
+import { MonthlyTrend } from "@/components/dashboard/monthly-trend";
+import { CategoryPerformance } from "@/components/dashboard/category-performance";
 import { getDashboardStats, getBestSellers } from "@/lib/actions/reports";
 import { getOrders } from "@/lib/actions/orders";
 
@@ -51,7 +54,7 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      {/* Stats */}
+      {/* Stats — 6 cards in 3-column grid */}
       <StatsCards stats={stats} />
 
       {/* Low Stock Warning */}
@@ -61,23 +64,40 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Charts + Tables */}
+      {/* Row 1: Weekly Sales Chart + Hourly Sales */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6 stagger">
         <div className="lg:col-span-3 animate-fade-up">
           <SalesChart data={stats.weekData} />
         </div>
         <div className="lg:col-span-2 animate-fade-up">
-          <TopProducts products={mappedTopProducts} />
+          <HourlySales data={stats.hourlySales} />
         </div>
       </div>
 
-      {/* Payment Breakdown + Recent Orders */}
+      {/* Row 2: Monthly Trend + Category Performance */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6 stagger">
+        <div className="lg:col-span-3 animate-fade-up">
+          <MonthlyTrend data={stats.monthlySales} />
+        </div>
+        <div className="lg:col-span-2 animate-fade-up">
+          <CategoryPerformance data={stats.categorySales} />
+        </div>
+      </div>
+
+      {/* Row 3: Top Products + Payment Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6 stagger">
         <div className="lg:col-span-2 animate-fade-up">
-          <PaymentBreakdown data={stats.paymentBreakdown || {}} />
+          <TopProducts products={mappedTopProducts} />
         </div>
         <div className="lg:col-span-3 animate-fade-up">
           <RecentOrders orders={mappedRecentOrders} />
+        </div>
+      </div>
+
+      {/* Row 4: Payment Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6 stagger">
+        <div className="lg:col-span-2 animate-fade-up">
+          <PaymentBreakdown data={stats.paymentBreakdown || {}} />
         </div>
       </div>
     </div>
