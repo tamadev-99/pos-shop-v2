@@ -266,7 +266,7 @@ export default function PembelianClient({ initialPOs, suppliers, products, categ
     const q = search.toLowerCase();
     const matchSearch =
       po.id.toLowerCase().includes(q) ||
-      po.supplier.name.toLowerCase().includes(q);
+      (po.supplier?.name || "").toLowerCase().includes(q);
     return matchTab && matchSearch;
   });
 
@@ -533,7 +533,7 @@ export default function PembelianClient({ initialPOs, suppliers, products, categ
                         {po.date}
                       </td>
                       <td className="px-3 md:px-4 py-3 text-xs text-foreground hidden sm:table-cell">
-                        {po.supplier.name}
+                        {po.supplier?.name || "Supplier Tidak Ditemukan"}
                       </td>
                       <td className="px-3 md:px-4 py-3 text-xs text-muted-foreground font-num hidden lg:table-cell">
                         {po.items.length} produk
@@ -599,7 +599,7 @@ export default function PembelianClient({ initialPOs, suppliers, products, categ
                         Supplier
                       </p>
                       <p className="text-xs font-medium text-foreground mt-0.5">
-                        {selectedPO.supplier.name}
+                        {selectedPO.supplier?.name || "Supplier Tidak Ditemukan"}
                       </p>
                     </div>
                     <div>

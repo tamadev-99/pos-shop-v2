@@ -29,7 +29,7 @@ export async function getSuppliers(filters?: { search?: string; status?: string 
       });
       return {
         ...supplier,
-        categories: cats.map((c) => c.category.name),
+        categories: cats.map((c) => c.category?.name || "Kategori Dihapus").filter(Boolean),
       };
     })
   );
@@ -51,7 +51,7 @@ export async function getSupplierById(id: string) {
 
   return {
     ...supplier,
-    categories: cats.map((c) => c.category.name),
+    categories: cats.map((c) => c.category?.name || "Kategori Dihapus").filter(Boolean),
   };
 }
 
