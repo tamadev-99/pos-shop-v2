@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
-import { Save, Store, User, Receipt, Users, Percent, Trash2, Printer, Usb, Wifi, Bluetooth, Loader2, AlertTriangle, CheckCircle } from "lucide-react";
+import { Save, Store, User, Receipt, Users, Percent, Trash2, Printer, Usb, Wifi, Bluetooth, Loader2, AlertTriangle, CheckCircle, Info } from "lucide-react";
 import { useState, useTransition } from "react";
 import { updateSetting, updateUserRole } from "@/lib/actions/settings";
 import { toast } from "sonner";
@@ -297,12 +297,48 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
                   <Select
                     options={[
                       { label: "Tidak Diterapkan", value: "no" },
-                      { label: "Ditambahkan", value: "exclude" },
+                      { label: "Ditambahkan (Exclude)", value: "exclude" },
                       { label: "Sudah Termasuk (Include)", value: "include" },
                     ]}
                     value={taxIncluded}
                     onChange={(e) => setTaxIncluded(e.target.value)}
                   />
+                </div>
+                <div className="rounded-xl bg-surface border border-border p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <Info size={14} className="text-accent mt-0.5 shrink-0" />
+                    <div className="space-y-1.5 text-[11px] text-muted-foreground leading-relaxed">
+                      {taxIncluded === "no" && (
+                        <>
+                          <p className="font-medium text-foreground text-xs">Tidak Diterapkan</p>
+                          <p>Pajak tidak akan dihitung pada transaksi. Harga yang ditampilkan adalah harga final tanpa komponen pajak.</p>
+                        </>
+                      )}
+                      {taxIncluded === "exclude" && (
+                        <>
+                          <p className="font-medium text-foreground text-xs">Ditambahkan (Exclude)</p>
+                          <p>Pajak dihitung di atas harga produk. Pelanggan membayar harga produk + pajak.</p>
+                          <div className="rounded-lg bg-card p-2 font-num text-[10px] space-y-0.5 border border-border mt-1">
+                            <p>Harga produk: Rp100.000</p>
+                            <p>{taxName} {taxRate}%: Rp{(100000 * Number(taxRate) / 100).toLocaleString("id-ID")}</p>
+                            <p className="font-bold text-foreground border-t border-border pt-1 mt-1">Total bayar: Rp{(100000 + 100000 * Number(taxRate) / 100).toLocaleString("id-ID")}</p>
+                          </div>
+                        </>
+                      )}
+                      {taxIncluded === "include" && (
+                        <>
+                          <p className="font-medium text-foreground text-xs">Sudah Termasuk (Include)</p>
+                          <p>Harga produk sudah termasuk pajak. Total yang dibayar pelanggan sama dengan harga yang ditampilkan — pajak dihitung mundur dari harga tersebut.</p>
+                          <div className="rounded-lg bg-card p-2 font-num text-[10px] space-y-0.5 border border-border mt-1">
+                            <p>Harga produk (termasuk pajak): Rp100.000</p>
+                            <p>Harga sebelum pajak: Rp{Math.round(100000 / (1 + Number(taxRate) / 100)).toLocaleString("id-ID")}</p>
+                            <p>{taxName} {taxRate}%: Rp{(100000 - Math.round(100000 / (1 + Number(taxRate) / 100))).toLocaleString("id-ID")}</p>
+                            <p className="font-bold text-foreground border-t border-border pt-1 mt-1">Total bayar: Rp100.000</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <Button type="submit" disabled={isPending}>
                   <Save size={14} />
