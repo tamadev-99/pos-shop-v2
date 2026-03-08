@@ -18,6 +18,7 @@ import {
   BarChart3,
   Clock,
   Bell,
+  ClipboardCheck,
   Settings,
   LogOut,
   ChevronLeft,
@@ -42,6 +43,7 @@ const navItems = [
   { label: "Promosi", href: "/promosi", icon: TicketPercent, group: "people" },
   { label: "Laporan & Keuangan", href: "/laporan", icon: BarChart3, group: "system" },
   { label: "Shift", href: "/shift", icon: Clock, group: "system" },
+  { label: "Audit", href: "/audit", icon: ClipboardCheck, group: "system" },
   { label: "Notifikasi", href: "/notifikasi", icon: Bell, group: "system" },
   { label: "Pengaturan", href: "/pengaturan", icon: Settings, group: "system" },
 ];

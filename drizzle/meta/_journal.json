@@ -50,6 +50,13 @@
       "when": 1772875402307,
       "tag": "0006_huge_harpoon",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1772916030280,
+      "tag": "0007_glorious_centennial",
+      "breakpoints": true
     }
   ]
 }

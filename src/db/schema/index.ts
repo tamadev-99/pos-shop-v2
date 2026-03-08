@@ -10,3 +10,4 @@ export * from "./finance";
 export * from "./notifications";
 export * from "./audit";
 export * from "./settings";
+export * from "./stock-opname";

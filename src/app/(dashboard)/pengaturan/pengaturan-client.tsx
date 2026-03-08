@@ -20,7 +20,6 @@ import {
   type PrinterConfig,
 } from "@/lib/thermal-printer";
 import { BarcodeTab } from "./barcode-tab";
-import { AuditLogTab } from "./audit-log-tab";
 import { AkunTab } from "./akun-tab";
 
 const settingsTabs = [
@@ -31,7 +30,6 @@ const settingsTabs = [
   { label: "Printer", value: "printer" },
   { label: "Pengguna", value: "pengguna" },
   { label: "Barcode", value: "barcode" },
-  { label: "Audit Log", value: "audit-log" },
 ];
 
 interface UserData {
@@ -45,11 +43,10 @@ interface UserData {
 interface Props {
   initialSettings: Record<string, any>;
   users: UserData[];
-  auditLogs: any[];
   variants: any[];
 }
 
-export default function PengaturanClient({ initialSettings, users, auditLogs, variants }: Props) {
+export default function PengaturanClient({ initialSettings, users, variants }: Props) {
   const [activeTab, setActiveTab] = useState("toko");
   const [isPending, startTransition] = useTransition();
 
@@ -576,11 +573,6 @@ export default function PengaturanClient({ initialSettings, users, auditLogs, va
         {/* Barcode */}
         {activeTab === "barcode" && (
           <BarcodeTab variants={variants} />
-        )}
-
-        {/* Audit Log */}
-        {activeTab === "audit-log" && (
-          <AuditLogTab auditLogs={auditLogs} />
         )}
       </div>
     </div>

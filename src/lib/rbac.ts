@@ -8,6 +8,7 @@ const rolePermissions: Record<Role, string[]> = {
     "/kontak",
     "/shift",
     "/notifikasi",
+    "/audit",
   ],
   manager: [
     "/",
@@ -20,6 +21,7 @@ const rolePermissions: Record<Role, string[]> = {
     "/laporan",
     "/shift",
     "/notifikasi",
+    "/audit",
   ],
   owner: [
     "/",
@@ -32,6 +34,7 @@ const rolePermissions: Record<Role, string[]> = {
     "/laporan",
     "/shift",
     "/notifikasi",
+    "/audit",
     "/pengaturan",
   ],
 };

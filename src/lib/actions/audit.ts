@@ -77,5 +77,5 @@ export async function createAuditLog(data: {
     ipAddress: data.ipAddress || null,
   });
 
-  revalidatePath("/audit-log");
+  revalidatePath("/audit");
 }
