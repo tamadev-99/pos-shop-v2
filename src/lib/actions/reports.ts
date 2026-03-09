@@ -113,17 +113,36 @@ export async function getDashboardStats() {
   const endOfYesterday = new Date(yesterday);
   endOfYesterday.setHours(23, 59, 59, 999);
 
+  const todayStr = today.toISOString().split("T")[0];
+
   // Single query for today's order stats
-  const todayOrders = await db
-    .select()
-    .from(orders)
-    .where(
-      and(
-        eq(orders.status, "selesai"),
-        gte(orders.date, today),
-        lte(orders.date, endOfDay)
-      )
-    );
+  const [todayOrders, newCustomersResult, pendingPOsResult] = await Promise.all([
+    db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.status, "selesai"),
+          gte(orders.date, today),
+          lte(orders.date, endOfDay)
+        )
+      ),
+    // New customers today
+    db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(customers)
+      .where(eq(customers.joinDate, todayStr)),
+    // Pending purchase orders
+    db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(purchaseOrders)
+      .where(
+        or(
+          eq(purchaseOrders.status, "diproses"),
+          eq(purchaseOrders.status, "dikirim")
+        )
+      ),
+  ]);
 
   // Yesterday's orders for comparison
   const yesterdayOrders = await db
@@ -247,6 +266,9 @@ export async function getDashboardStats() {
   }
   const uniqueCustomers = customerSet.size;
 
+  const newCustomers = newCustomersResult[0]?.count ?? 0;
+  const pendingPurchaseOrders = pendingPOsResult[0]?.count ?? 0;
+
   // ── NEW: Hourly sales breakdown (24h) ──
   const hourlySales: { hour: number; sales: number; orders: number }[] = [];
   const hourMap = new Map<number, { sales: number; orders: number }>();
@@ -339,58 +361,13 @@ export async function getDashboardStats() {
     hourlySales,
     monthlySales,
     categorySales,
-  };
-}
-
-export async function getTodaySummary() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999);
-
-  const todayStr = today.toISOString().split("T")[0];
-
-  const [todayOrders, newCustomersResult, pendingPOsResult] = await Promise.all([
-    // Today's completed orders
-    db
-      .select()
-      .from(orders)
-      .where(
-        and(
-          eq(orders.status, "selesai"),
-          gte(orders.date, today),
-          lte(orders.date, endOfDay)
-        )
-      ),
-    // New customers today (joinDate is stored as text, e.g. "2026-03-09")
-    db
-      .select({ count: sql<number>`COUNT(*)::int` })
-      .from(customers)
-      .where(eq(customers.joinDate, todayStr)),
-    // Pending purchase orders (diproses or dikirim)
-    db
-      .select({ count: sql<number>`COUNT(*)::int` })
-      .from(purchaseOrders)
-      .where(
-        or(
-          eq(purchaseOrders.status, "diproses"),
-          eq(purchaseOrders.status, "dikirim")
-        )
-      ),
-  ]);
-
-  const totalSales = todayOrders.reduce((sum, o) => sum + o.total, 0);
-  const totalOrders = todayOrders.length;
-  const newCustomers = newCustomersResult[0]?.count ?? 0;
-  const pendingPurchaseOrders = pendingPOsResult[0]?.count ?? 0;
-
-  return {
-    totalSales,
-    totalOrders,
+    // Dashboard v3 data (Moved from TodaySummary)
     newCustomers,
     pendingPurchaseOrders,
   };
 }
+
+
 
 // ═══════════════════════════════════════════════════════════
 // Advanced Analytics Reports

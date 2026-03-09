@@ -15,6 +15,8 @@ interface StatsCardsProps {
     yesterdayOrderCount?: number;
     grossProfit?: number;
     uniqueCustomers?: number;
+    newCustomers?: number;
+    pendingPurchaseOrders?: number;
   };
 }
 
@@ -94,10 +96,28 @@ export function StatsCards({ stats }: StatsCardsProps) {
       iconColor: "text-rose-400",
       glowColor: "shadow-[0_0_20px_-6px_rgba(244,63,94,0.25)]",
     },
+    {
+      label: "Pelanggan Baru",
+      value: formatNumber(stats.newCustomers ?? 0),
+      trend: "neutral" as const,
+      icon: Users,
+      gradient: "from-blue-500/20 to-sky-500/20",
+      iconColor: "text-blue-400",
+      glowColor: "shadow-[0_0_20px_-6px_rgba(59,130,246,0.25)]",
+    },
+    {
+      label: "PO Pending",
+      value: formatNumber(stats.pendingPurchaseOrders ?? 0),
+      trend: "neutral" as const,
+      icon: Package,
+      gradient: "from-slate-500/20 to-gray-500/20",
+      iconColor: "text-slate-400",
+      glowColor: "shadow-[0_0_20px_-6px_rgba(100,116,139,0.25)]",
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 stagger">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 stagger">
       {displayStats.map((stat) => (
         <Card key={stat.label} className="p-3 md:p-4 animate-fade-up" hover>
           <div className="flex items-start justify-between">
