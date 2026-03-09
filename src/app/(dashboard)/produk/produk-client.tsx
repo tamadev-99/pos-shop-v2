@@ -48,7 +48,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { compressImage } from "@/lib/image-compress";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // ---------------------------------------------------------------------------
 // Types from DB
@@ -149,6 +149,12 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
   const [products, setProducts] = useState<DBProduct[]>(initialProducts);
   const [offset, setOffset] = useState(initialProducts.length);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // Sync when server re-fetches data after router.refresh()
+  useEffect(() => {
+    setProducts(initialProducts);
+    setOffset(initialProducts.length);
+  }, [initialProducts]);
 
   const [mainTab, setMainTab] = useState("katalog");
   const [category, setCategory] = useState("all");

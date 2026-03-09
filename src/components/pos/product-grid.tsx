@@ -27,26 +27,28 @@ export function ProductGrid({ products, onSelectProduct }: ProductGridProps) {
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-2.5">
       {products.map((product) => {
         const totalStock = getTotalStockFromProduct(product);
+        const isSoldOut = totalStock <= 0;
         return (
           <button
             key={product.id}
-            onClick={() => onSelectProduct(product)}
-            className="group flex flex-col rounded-2xl p-2.5 md:p-3 text-left cursor-pointer
+            onClick={() => !isSoldOut && onSelectProduct(product)}
+            disabled={isSoldOut}
+            className={`group flex flex-col rounded-2xl p-2.5 md:p-3 text-left
               bg-white/[0.025] backdrop-blur-sm border border-border
               shadow-[0_2px_12px_-4px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.03)]
               transition-all duration-300 ease-out
-              hover:bg-surface hover:border-accent/20
-              hover:shadow-[0_8px_32px_-8px_rgba(16,185,129,0.12),0_0_0_1px_rgba(16,185,129,0.08),inset_0_1px_0_rgba(255,255,255,0.06)]
-              hover:-translate-y-1
-              active:scale-[0.97] active:translate-y-0"
+              ${isSoldOut
+                ? "opacity-50 cursor-not-allowed"
+                : "cursor-pointer hover:bg-surface hover:border-accent/20 hover:shadow-[0_8px_32px_-8px_rgba(16,185,129,0.12),0_0_0_1px_rgba(16,185,129,0.08),inset_0_1px_0_rgba(255,255,255,0.06)] hover:-translate-y-1 active:scale-[0.97] active:translate-y-0"
+              }`}
           >
             {/* Product Image */}
-            <div className="w-full aspect-square rounded-xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] mb-2 md:mb-2.5 flex items-center justify-center overflow-hidden border border-border">
+            <div className="relative w-full aspect-square rounded-xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] mb-2 md:mb-2.5 flex items-center justify-center overflow-hidden border border-border">
               {product.imageUrl ? (
                 <img
                   src={product.imageUrl}
                   alt={product.name}
-                  className="w-full h-full object-cover"
+                  className={`w-full h-full object-cover ${isSoldOut ? "grayscale" : ""}`}
                   loading="lazy"
                 />
               ) : (
@@ -54,6 +56,13 @@ export function ProductGrid({ products, onSelectProduct }: ProductGridProps) {
                   size={24}
                   className="text-muted-dim/30 group-hover:text-accent/25 transition-colors duration-300"
                 />
+              )}
+              {isSoldOut && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-white bg-red-500/90 px-2 py-0.5 rounded-full">
+                    Habis
+                  </span>
+                </div>
               )}
             </div>
             {/* Info */}
@@ -66,7 +75,7 @@ export function ProductGrid({ products, onSelectProduct }: ProductGridProps) {
             <p className="text-xs md:text-sm font-bold font-num mt-auto pt-1">
               <span className="text-gradient">{formatRupiah(product.basePrice)}</span>
             </p>
-            <p className="text-[10px] text-muted-dim mt-0.5">
+            <p className={`text-[10px] mt-0.5 ${isSoldOut ? "text-red-400 font-medium" : "text-muted-dim"}`}>
               Stok: {totalStock} • {product.variants.length} varian
             </p>
           </button>

@@ -8,7 +8,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { Dialog, DialogClose, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatRupiah } from "@/lib/utils";
 import { Search, Eye, FileText, XCircle, Printer, Download } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { cancelOrder, getOrders } from "@/lib/actions/orders";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -135,6 +135,12 @@ export default function PesananClient({ initialOrders, initialReturns, totalOrde
   const [offset, setOffset] = useState(initialOrders.length);
   const [loadingMore, setLoadingMore] = useState(false);
   const hasMoreData = offset < totalOrders;
+
+  // Sync when server re-fetches data after router.refresh()
+  useEffect(() => {
+    setOrders(initialOrders.map(mapDBOrderToOrder));
+    setOffset(initialOrders.length);
+  }, [initialOrders]);
 
   async function handleLoadMore() {
     try {

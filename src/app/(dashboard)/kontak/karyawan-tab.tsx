@@ -14,7 +14,7 @@ import {
     KeyRound,
     ShieldCheck,
 } from "lucide-react";
-import { useState, useMemo, useTransition } from "react";
+import { useState, useEffect, useMemo, useTransition } from "react";
 import { toast } from "sonner";
 import { updateEmployeeRole, createEmployeeFromOwner, toggleEmployeeBan, resetEmployeePassword } from "@/lib/actions/employees";
 import { Input } from "@/components/ui/input";
@@ -52,6 +52,12 @@ export function KaryawanTab({ initialEmployees }: KaryawanTabProps) {
     const { user } = useAuth();
     const isOwner = user?.role === "owner";
     const [employees, setEmployees] = useState(initialEmployees);
+
+    // Sync when server re-fetches data after router.refresh()
+    useEffect(() => {
+        setEmployees(initialEmployees);
+    }, [initialEmployees]);
+
     const [search, setSearch] = useState("");
     const [roleFilter, setRoleFilter] = useState("all");
     const [isPending, startTransition] = useTransition();
