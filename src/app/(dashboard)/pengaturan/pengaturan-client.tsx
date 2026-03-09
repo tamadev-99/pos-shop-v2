@@ -51,17 +51,17 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
   const [isPending, startTransition] = useTransition();
 
   // Local state for settings to update
-  const [storeName, setStoreName] = useState(initialSettings["storeName"] || "Toko Maju Jaya");
-  const [storeAddress, setStoreAddress] = useState(initialSettings["storeAddress"] || "Jl. Raya Utama No. 123, Jakarta");
-  const [storePhone, setStorePhone] = useState(initialSettings["storePhone"] || "021-5551234");
-  const [storeEmail, setStoreEmail] = useState(initialSettings["storeEmail"] || "info@tokomajujaya.id");
+  const [storeName, setStoreName] = useState(initialSettings["storeName"] || "");
+  const [storeAddress, setStoreAddress] = useState(initialSettings["storeAddress"] || "");
+  const [storePhone, setStorePhone] = useState(initialSettings["storePhone"] || "");
+  const [storeEmail, setStoreEmail] = useState(initialSettings["storeEmail"] || "");
 
   const [taxName, setTaxName] = useState(initialSettings["taxName"] || "PPN");
   const [taxRate, setTaxRate] = useState(initialSettings["taxRate"] || "11");
   const [taxIncluded, setTaxIncluded] = useState(initialSettings["taxIncluded"] || "no");
 
-  const [receiptHeader, setReceiptHeader] = useState(initialSettings["receiptHeader"] || "Toko Maju Jaya");
-  const [receiptAddress, setReceiptAddress] = useState(initialSettings["receiptAddress"] || "Jl. Raya Utama No. 123");
+  const [receiptHeader, setReceiptHeader] = useState(initialSettings["receiptHeader"] || "");
+  const [receiptAddress, setReceiptAddress] = useState(initialSettings["receiptAddress"] || "");
   const [receiptFooter, setReceiptFooter] = useState(initialSettings["receiptFooter"] || "Terima kasih atas kunjungan Anda!");
   const [receiptWidth, setReceiptWidth] = useState(initialSettings["receiptWidth"] || "58");
   const [receiptLogo, setReceiptLogo] = useState(initialSettings["receiptLogo"] || "no");

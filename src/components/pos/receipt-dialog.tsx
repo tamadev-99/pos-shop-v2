@@ -3,7 +3,8 @@
 import { Dialog, DialogClose, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatRupiah } from "@/lib/utils";
-import { Printer, X, CheckCircle2, MessageCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Printer, X, CheckCircle2, MessageCircle, Send } from "lucide-react";
 import { useRef, useState } from "react";
 import { buildReceiptCommands, printReceipt, printViaBrowser, type PrinterConfig, type ReceiptPrintData } from "@/lib/thermal-printer";
 import { toast } from "sonner";
@@ -78,6 +79,8 @@ export function ReceiptDialog({
     taxName = "PPN",
 }: ReceiptDialogProps) {
     const receiptRef = useRef<HTMLDivElement>(null);
+    const [showPhoneInput, setShowPhoneInput] = useState(false);
+    const [manualPhone, setManualPhone] = useState("");
     const now = new Date();
 
     const handlePrint = async () => {
@@ -126,7 +129,15 @@ export function ReceiptDialog({
         }
     };
 
-    const handleWhatsApp = () => {
+    const formatPhoneForWA = (phone: string) => {
+        let formatted = phone.replace(/\D/g, '');
+        if (formatted.startsWith('0')) {
+            formatted = '62' + formatted.substring(1);
+        }
+        return formatted;
+    };
+
+    const sendWhatsApp = (phone?: string) => {
         const receiptUrl = `${window.location.origin}/receipt/${orderId}`;
 
         let text = `*Terima Kasih!*\n`;
@@ -138,17 +149,31 @@ export function ReceiptDialog({
 
         const encodedText = encodeURIComponent(text);
 
-        let waLink = `https://wa.me/?text=${encodedText}`;
-        if (customerPhone) {
-            // Remove non-digit chars and ensure starting with country code. Assuming ID (62) for local standard if starts with 0.
-            let formattedPhone = customerPhone.replace(/\D/g, '');
-            if (formattedPhone.startsWith('0')) {
-                formattedPhone = '62' + formattedPhone.substring(1);
-            }
-            waLink = `https://wa.me/${formattedPhone}?text=${encodedText}`;
+        if (phone) {
+            const formattedPhone = formatPhoneForWA(phone);
+            window.open(`https://wa.me/${formattedPhone}?text=${encodedText}`, "_blank");
+        } else {
+            window.open(`https://wa.me/?text=${encodedText}`, "_blank");
         }
+    };
 
-        window.open(waLink, "_blank");
+    const handleWhatsApp = () => {
+        if (customerPhone) {
+            sendWhatsApp(customerPhone);
+        } else {
+            setShowPhoneInput(true);
+        }
+    };
+
+    const handleSendManualPhone = () => {
+        const cleaned = manualPhone.replace(/\D/g, '');
+        if (cleaned.length < 9) {
+            toast.error("Nomor telepon tidak valid");
+            return;
+        }
+        sendWhatsApp(manualPhone);
+        setShowPhoneInput(false);
+        setManualPhone("");
     };
 
     return (
@@ -278,6 +303,33 @@ export function ReceiptDialog({
                     </div>
                 </div>
             </div>
+
+            {/* Phone input for Pelanggan Umum */}
+            {showPhoneInput && (
+                <div className="mt-3 p-3 bg-surface border border-border rounded-xl space-y-2">
+                    <p className="text-xs text-muted-foreground">Masukkan nomor WhatsApp pelanggan:</p>
+                    <div className="flex gap-2">
+                        <Input
+                            type="tel"
+                            placeholder="08xxxxxxxxxx"
+                            value={manualPhone}
+                            onChange={(e) => setManualPhone(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleSendManualPhone()}
+                            className="flex-1"
+                            autoFocus
+                        />
+                        <Button size="sm" onClick={handleSendManualPhone} className="bg-[#25D366] hover:bg-[#25D366]/90 text-white">
+                            <Send size={14} />
+                        </Button>
+                    </div>
+                    <button
+                        onClick={() => { setShowPhoneInput(false); setManualPhone(""); }}
+                        className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                        Batal
+                    </button>
+                </div>
+            )}
 
             {/* Action buttons */}
             <div className="flex flex-col sm:flex-row gap-2 mt-4">

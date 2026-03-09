@@ -281,6 +281,17 @@ export default function POSClient({ initialProducts, customers, promotions, prin
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
 
+  const findDBVariant = useCallback(
+    (variantId: string) => {
+      for (const p of initialProducts) {
+        const v = p.variants.find((v) => v.id === variantId);
+        if (v) return { product: p, variant: v };
+      }
+      return null;
+    },
+    [initialProducts]
+  );
+
   // Discount calculations
   const selectedCustomerData = customers.find((c) => c.id === selectedCustomer);
 
@@ -376,17 +387,6 @@ export default function POSClient({ initialProducts, customers, promotions, prin
   // If 'no', tax is 0 and total is just discountedSubtotal + shippingFee
 
   const cartItemCount = cart.reduce((sum, i) => sum + i.qty, 0);
-
-  const findDBVariant = useCallback(
-    (variantId: string) => {
-      for (const p of initialProducts) {
-        const v = p.variants.find((v) => v.id === variantId);
-        if (v) return { product: p, variant: v };
-      }
-      return null;
-    },
-    [initialProducts]
-  );
 
   // Bug Fix #6: Block checkout without active shift
   const tryCheckout = useCallback(() => {

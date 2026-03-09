@@ -196,13 +196,22 @@ async function seed() {
 
   // --- Default Store Settings ---
   const defaultSettings = [
-    { key: "store_name", value: "KasirPro Fashion Store" },
-    { key: "store_address", value: "Jl. Fashion No. 1, Bandung" },
-    { key: "store_phone", value: "022-12345678" },
-    { key: "tax_rate", value: 11 },
+    { key: "storeName", value: "KasirPro Fashion Store" },
+    { key: "storeAddress", value: "Jl. Fashion No. 1, Bandung" },
+    { key: "storePhone", value: "022-12345678" },
+    { key: "storeEmail", value: "" },
+    { key: "taxName", value: "PPN" },
+    { key: "taxRate", value: "11" },
+    { key: "taxIncluded", value: "no" },
+    { key: "receiptHeader", value: "KasirPro Fashion Store" },
+    { key: "receiptAddress", value: "Jl. Fashion No. 1, Bandung" },
+    { key: "receiptFooter", value: "Terima kasih atas kunjungan Anda!" },
+    { key: "receiptWidth", value: "58" },
+    { key: "receiptLogo", value: "no" },
+    { key: "printerType", value: "usb" },
+    { key: "printerTarget", value: "POS-58 Thermal Printer" },
     { key: "currency", value: "IDR" },
-    { key: "receipt_footer", value: "Terima kasih atas kunjungan Anda!" },
-    { key: "loyalty_points_rate", value: 1000 },
+    { key: "loyaltyPointsRate", value: 1000 },
   ];
 
   for (const s of defaultSettings) {

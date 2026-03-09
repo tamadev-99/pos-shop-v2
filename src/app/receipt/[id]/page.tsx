@@ -7,9 +7,10 @@ import { ReceiptClient } from "./receipt-client";
 export default async function DynamicReceiptPage({
     params,
 }: {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 }) {
-    const order = await getOrderById(params.id);
+    const { id } = await params;
+    const order = await getOrderById(id);
 
     if (!order) {
         return notFound();
@@ -26,7 +27,21 @@ export default async function DynamicReceiptPage({
 
     return (
         <ReceiptClient
-            order={order}
+            order={{
+                id: order.id,
+                createdAt: order.createdAt,
+                cashierId: order.cashierId ?? null,
+                customerName: order.customerName ?? null,
+                items: order.items,
+                subtotal: order.subtotal,
+                discountAmount: order.discountAmount,
+                shippingFee: order.shippingFee,
+                taxAmount: order.taxAmount,
+                total: order.total,
+                paymentMethod: order.paymentMethod,
+                cashPaid: order.cashPaid ?? null,
+                changeAmount: order.changeAmount ?? null,
+            }}
             store={{
                 name: (storeName as string) || "KasirPro",
                 address: (receiptAddress as string) || "",
