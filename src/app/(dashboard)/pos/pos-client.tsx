@@ -1,6 +1,6 @@
 "use client";
 
-import { CartPanel, type CartItem } from "@/components/pos/cart-panel";
+import { CartPanel } from "@/components/pos/cart-panel";
 import { CategoryBar } from "@/components/pos/category-bar";
 import { PaymentDialog } from "@/components/pos/payment-dialog";
 import { ProductGrid } from "@/components/pos/product-grid";
@@ -11,7 +11,7 @@ import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { type Product, type ProductVariant } from "@/lib/types";
+import { type Product, type ProductVariant, type CartItem, type Promotion } from "@/lib/types";
 import { Search, ShoppingCart, Pause, Play, ScanBarcode } from "lucide-react";
 import { useMemo, useState, useCallback, useTransition, useEffect } from "react";
 import { cn, formatRupiah } from "@/lib/utils";
@@ -66,17 +66,6 @@ interface HeldTransaction {
   timestamp: string;
 }
 
-export interface Promotion {
-  id: string;
-  name: string;
-  type: "percentage" | "fixed" | "buy_x_get_y" | "bundle";
-  value: number;
-  minPurchase: number;
-  buyQty: number | null;
-  getQty: number | null;
-  appliesTo: "all" | "category" | "product";
-  targetIds: string[] | null;
-}
 
 interface CustomerData {
   id: string;

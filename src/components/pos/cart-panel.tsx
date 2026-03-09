@@ -5,18 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { formatRupiah } from "@/lib/utils";
 import { Minus, Plus, ShoppingCart, Trash2, X, Pause, Truck, Tag, Star, Coins } from "lucide-react";
-import type { Promotion } from "@/app/(dashboard)/pos/pos-client";
+import type { Promotion, CartItem } from "@/lib/types";
 
-export interface CartItem {
-  id: string;
-  productId: string;
-  variantId: string;
-  name: string;
-  color: string;
-  size: string;
-  price: number;
-  qty: number;
-}
+export type { CartItem };
 
 interface CartPanelProps {
   items: CartItem[];

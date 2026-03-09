@@ -23,6 +23,29 @@ export interface Product {
   variants: ProductVariant[];
 }
 
+export interface CartItem {
+  id: string;
+  productId: string;
+  variantId: string;
+  name: string;
+  color: string;
+  size: string;
+  price: number;
+  qty: number;
+}
+
+export interface Promotion {
+  id: string;
+  name: string;
+  type: "percentage" | "fixed" | "buy_x_get_y" | "bundle";
+  value: number;
+  minPurchase: number;
+  buyQty: number | null;
+  getQty: number | null;
+  appliesTo: "all" | "category" | "product";
+  targetIds: string[] | null;
+}
+
 export function getUniqueColors(product: Product): string[] {
   const colors = product.variants.map((v) => v.color).filter(Boolean);
   return Array.from(new Set(colors));
