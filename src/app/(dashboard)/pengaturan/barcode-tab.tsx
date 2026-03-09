@@ -19,10 +19,9 @@ import {
   AlertCircle,
   Bluetooth,
 } from "lucide-react";
-import { useState, useTransition, useRef, useCallback } from "react";
+import { useState, useTransition, useCallback } from "react";
 import { toast } from "sonner";
 import { getVariantByBarcode } from "@/lib/actions/products";
-import { formatRupiah as fmtR } from "@/lib/utils";
 import {
   LABEL_PRESETS,
   buildBarcodeLabelCommands,
