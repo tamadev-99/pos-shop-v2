@@ -18,6 +18,7 @@ export const products = pgTable("products", {
   categoryId: text("category_id").notNull().references(() => categories.id),
   supplierId: text("supplier_id"), // Optional supplier relation
   description: text("description").default(""),
+  imageUrl: text("image_url"),
   basePrice: integer("base_price").notNull(),
   baseCost: integer("base_cost").notNull(),
   isBundle: boolean("is_bundle").notNull().default(false),

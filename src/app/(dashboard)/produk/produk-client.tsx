@@ -44,7 +44,10 @@ import {
   Download,
   Upload,
   Printer,
+  ImagePlus,
+  Loader2,
 } from "lucide-react";
+import { compressImage } from "@/lib/image-compress";
 import { useState } from "react";
 
 // ---------------------------------------------------------------------------
@@ -86,6 +89,7 @@ interface DBProduct {
   categoryId: string;
   supplierId: string | null;
   description: string | null;
+  imageUrl: string | null;
   basePrice: number;
   baseCost: number;
   isBundle: boolean;
@@ -167,6 +171,9 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
   const [formCategoryId, setFormCategoryId] = useState("");
   const [formSupplierId, setFormSupplierId] = useState("");
   const [formDescription, setFormDescription] = useState("");
+  const [formImageUrl, setFormImageUrl] = useState("");
+  const [formImagePreview, setFormImagePreview] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
   const [formBasePrice, setFormBasePrice] = useState("");
   const [formBaseCost, setFormBaseCost] = useState("");
 
@@ -308,6 +315,8 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
     setFormCategoryId("");
     setFormSupplierId("");
     setFormDescription("");
+    setFormImageUrl("");
+    setFormImagePreview("");
     setFormBasePrice("");
     setFormBaseCost("");
     setProductType("single");
@@ -331,6 +340,8 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
       setFormCategoryId(product.categoryId);
       setFormSupplierId(product.supplierId || "");
       setFormDescription(product.description || "");
+      setFormImageUrl(product.imageUrl || "");
+      setFormImagePreview(product.imageUrl || "");
       setFormBasePrice(String(product.basePrice));
       setFormBaseCost(String(product.baseCost));
 
@@ -386,6 +397,7 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
           categoryId: formCategoryId,
           supplierId: formSupplierId || undefined,
           description: formDescription,
+          imageUrl: formImageUrl || undefined,
           basePrice: parseInt(formBasePrice) || 0,
           baseCost: parseInt(formBaseCost) || 0,
           isBundle: productType === "bundle",
@@ -442,6 +454,7 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
           categoryId: formCategoryId,
           supplierId: formSupplierId || undefined,
           description: formDescription,
+          imageUrl: formImageUrl || undefined,
           basePrice: parseInt(formBasePrice) || 0,
           baseCost: parseInt(formBaseCost) || 0,
           isBundle,
@@ -628,8 +641,12 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
                       {/* Produk */}
                       <td className="px-3 md:px-4 py-3">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-white/[0.06] to-white/[0.02] flex items-center justify-center shrink-0 border border-border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                            <Package size={14} className="text-muted-dim" />
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-white/[0.06] to-white/[0.02] flex items-center justify-center shrink-0 border border-border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] overflow-hidden">
+                            {product.imageUrl ? (
+                              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
+                            ) : (
+                              <Package size={14} className="text-muted-dim" />
+                            )}
                           </div>
                           <div className="flex flex-col">
                             <span className="text-xs font-medium text-foreground">
@@ -906,6 +923,84 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
                     onChange={(e) => setFormBrand(e.target.value)}
                     required
                   />
+                </div>
+              </div>
+
+              {/* Foto Produk */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Foto Produk (Opsional)
+                </label>
+                <div className="flex items-center gap-3">
+                  {formImagePreview ? (
+                    <div className="relative w-20 h-20 rounded-xl border border-border overflow-hidden flex-shrink-0">
+                      <img src={formImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => { setFormImageUrl(""); setFormImagePreview(""); }}
+                        className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
+                      >
+                        <X size={12} className="text-white" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className={cn(
+                      "w-20 h-20 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer flex-shrink-0",
+                      "hover:border-accent/40 hover:bg-accent/5 transition-colors",
+                      imageUploading && "pointer-events-none opacity-50"
+                    )}>
+                      {imageUploading ? (
+                        <Loader2 size={20} className="text-muted-dim animate-spin" />
+                      ) : (
+                        <ImagePlus size={20} className="text-muted-dim" />
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          e.target.value = "";
+
+                          // Show local preview immediately
+                          const localUrl = URL.createObjectURL(file);
+                          setFormImagePreview(localUrl);
+                          setImageUploading(true);
+
+                          try {
+                            // Compress: resize 400x400 + WebP 75%
+                            const compressed = await compressImage(file);
+
+                            // Upload to Supabase Storage
+                            const formData = new FormData();
+                            formData.append("file", compressed, "product.webp");
+
+                            const res = await fetch("/api/upload", { method: "POST", body: formData });
+                            const json = await res.json();
+
+                            if (!res.ok) throw new Error(json.error || "Upload gagal");
+
+                            setFormImageUrl(json.url);
+                            setFormImagePreview(json.url);
+                            URL.revokeObjectURL(localUrl);
+                            toast.success("Foto berhasil diupload");
+                          } catch (err) {
+                            console.error(err);
+                            toast.error("Gagal upload foto");
+                            setFormImagePreview("");
+                            URL.revokeObjectURL(localUrl);
+                          } finally {
+                            setImageUploading(false);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                  <p className="text-[10px] text-muted-dim leading-relaxed">
+                    Otomatis dikompres ke WebP 400x400px.<br />
+                    Max ~20KB per foto.
+                  </p>
                 </div>
               </div>
 

@@ -101,6 +101,7 @@ export async function createProduct(data: {
   categoryId: string;
   supplierId?: string;
   description?: string;
+  imageUrl?: string;
   basePrice: number;
   baseCost: number;
   isBundle?: boolean;
@@ -129,6 +130,7 @@ export async function createProduct(data: {
     categoryId: data.categoryId,
     supplierId: data.supplierId || null,
     description: data.description || "",
+    imageUrl: data.imageUrl || null,
     basePrice: data.basePrice,
     baseCost: data.baseCost,
     isBundle: data.isBundle || false,
@@ -186,6 +188,7 @@ export async function updateProduct(
     categoryId: string;
     supplierId: string;
     description: string;
+    imageUrl: string;
     basePrice: number;
     baseCost: number;
     status: "aktif" | "nonaktif";

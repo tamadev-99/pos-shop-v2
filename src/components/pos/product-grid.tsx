@@ -40,12 +40,21 @@ export function ProductGrid({ products, onSelectProduct }: ProductGridProps) {
               hover:-translate-y-1
               active:scale-[0.97] active:translate-y-0"
           >
-            {/* Image placeholder */}
+            {/* Product Image */}
             <div className="w-full aspect-square rounded-xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] mb-2 md:mb-2.5 flex items-center justify-center overflow-hidden border border-border">
-              <Package
-                size={24}
-                className="text-muted-dim/30 group-hover:text-accent/25 transition-colors duration-300"
-              />
+              {product.imageUrl ? (
+                <img
+                  src={product.imageUrl}
+                  alt={product.name}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <Package
+                  size={24}
+                  className="text-muted-dim/30 group-hover:text-accent/25 transition-colors duration-300"
+                />
+              )}
             </div>
             {/* Info */}
             <p className="text-[11px] md:text-xs font-medium text-foreground leading-tight line-clamp-2 mb-0.5">

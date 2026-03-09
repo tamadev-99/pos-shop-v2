@@ -17,6 +17,7 @@ export interface Product {
   brand: string;
   category: string;
   description: string;
+  imageUrl: string | null;
   basePrice: number;
   baseCost: number;
   status: "aktif" | "nonaktif";

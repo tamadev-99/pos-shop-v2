@@ -29,6 +29,7 @@ interface DBProduct {
   brand: string;
   categoryId: string;
   description: string | null;
+  imageUrl: string | null;
   basePrice: number;
   baseCost: number;
   status: "aktif" | "nonaktif";
@@ -90,6 +91,7 @@ function mapDBProductToProduct(dbProduct: DBProduct): Product {
     brand: dbProduct.brand,
     category: (dbProduct.category?.name ?? "Lainnya") as Product["category"],
     description: dbProduct.description ?? "",
+    imageUrl: dbProduct.imageUrl ?? null,
     basePrice: dbProduct.basePrice,
     baseCost: dbProduct.baseCost,
     status: dbProduct.status,
