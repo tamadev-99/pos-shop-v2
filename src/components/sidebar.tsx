@@ -6,6 +6,7 @@ import { useTheme } from "@/components/providers/theme-provider";
 import { authClient } from "@/lib/auth-client";
 import { hasAccess, type Role } from "@/lib/rbac";
 import { getNotifications } from "@/lib/actions/notifications";
+import { createAuditLog } from "@/lib/actions/audit";
 import { usePollingNotifications } from "@/hooks/use-polling-notifications";
 import {
   LayoutDashboard,
@@ -102,6 +103,15 @@ export function Sidebar() {
   }, [mobileOpen]);
 
   const handleLogout = async () => {
+    if (user) {
+      createAuditLog({
+        userId: user.id,
+        userName: user.name || "Unknown",
+        action: "logout",
+        detail: `${user.name || user.email} logout`,
+        metadata: { email: user.email },
+      }).catch(() => {});
+    }
     await authClient.signOut();
     window.location.href = "/login";
   };

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { exportToCSV } from "@/lib/export-csv";
 import {
   ShieldCheck,
   Search,
@@ -186,7 +187,28 @@ export function AuditLogTab({ auditLogs }: AuditLogTabProps) {
       {/* Header */}
       <div className="flex justify-between items-center animate-fade-up">
         <h2 className="text-sm font-semibold text-foreground">Audit Log</h2>
-        <Button variant="secondary" size="sm" onClick={() => alert("Mengekspor audit log...")}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            const data = filtered.map((entry) => ({
+              waktu: new Date(entry.createdAt).toLocaleString("id-ID"),
+              pengguna: entry.userName,
+              aksi: actionConfig[entry.action]?.label || entry.action,
+              detail: entry.detail,
+              metadata: entry.metadata ? JSON.stringify(entry.metadata) : "",
+              ip: entry.ipAddress || "",
+            }));
+            exportToCSV(data, "audit-log", [
+              { key: "waktu", label: "Waktu" },
+              { key: "pengguna", label: "Pengguna" },
+              { key: "aksi", label: "Aksi" },
+              { key: "detail", label: "Detail" },
+              { key: "metadata", label: "Metadata" },
+              { key: "ip", label: "IP Address" },
+            ]);
+          }}
+        >
           <Download size={14} className="mr-1" />
           Ekspor CSV
         </Button>

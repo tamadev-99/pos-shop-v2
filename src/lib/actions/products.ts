@@ -295,6 +295,155 @@ export async function deleteCategory(id: string) {
   revalidatePath("/produk");
 }
 
+export async function importProducts(
+  rows: {
+    productName: string;
+    sku: string;
+    barcode: string;
+    category: string;
+    brand: string;
+    sellPrice: number;
+    buyPrice: number;
+    stock: number;
+    minStock: number;
+    status: string;
+  }[],
+  mode: "skip" | "update"
+): Promise<{ created: number; updated: number; skipped: number; errors: number }> {
+  await requireRole("manager", "owner");
+
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  // Preload categories for matching by name
+  const allCategories = await db.select().from(categories);
+  const categoryMap = new Map(allCategories.map((c) => [c.name.toLowerCase(), c.id]));
+
+  for (const row of rows) {
+    try {
+      // Check if SKU already exists
+      const existingVariant = await db.query.productVariants.findFirst({
+        where: eq(productVariants.sku, row.sku),
+        with: { product: true },
+      });
+
+      if (existingVariant) {
+        if (mode === "skip") {
+          skipped++;
+          continue;
+        }
+
+        // Update mode: update price and stock
+        await db
+          .update(productVariants)
+          .set({
+            sellPrice: row.sellPrice,
+            buyPrice: row.buyPrice,
+            stock: row.stock,
+            minStock: row.minStock,
+            status: (row.status === "nonaktif" ? "nonaktif" : "aktif") as "aktif" | "nonaktif",
+          })
+          .where(eq(productVariants.id, existingVariant.id));
+
+        // Also update product base prices
+        await db
+          .update(products)
+          .set({
+            basePrice: row.sellPrice,
+            baseCost: row.buyPrice,
+            updatedAt: new Date(),
+          })
+          .where(eq(products.id, existingVariant.productId));
+
+        updated++;
+        continue;
+      }
+
+      // New product — resolve or create category
+      let categoryId = categoryMap.get(row.category.toLowerCase());
+      if (!categoryId && row.category) {
+        const newCatId = crypto.randomUUID();
+        const slug = row.category
+          .toLowerCase()
+          .replace(/\s+/g, "-")
+          .replace(/[^a-z0-9-]/g, "");
+        await db.insert(categories).values({
+          id: newCatId,
+          name: row.category,
+          slug,
+          description: "",
+        });
+        categoryId = newCatId;
+        categoryMap.set(row.category.toLowerCase(), newCatId);
+      }
+
+      if (!categoryId) {
+        // Fallback: use first available category or create "Umum"
+        if (allCategories.length > 0) {
+          categoryId = allCategories[0].id;
+        } else {
+          const fallbackId = crypto.randomUUID();
+          await db.insert(categories).values({
+            id: fallbackId,
+            name: "Umum",
+            slug: "umum",
+            description: "",
+          });
+          categoryId = fallbackId;
+          categoryMap.set("umum", fallbackId);
+        }
+      }
+
+      // Create product
+      const productId = crypto.randomUUID();
+      await db.insert(products).values({
+        id: productId,
+        name: row.productName,
+        brand: row.brand || "-",
+        categoryId,
+        basePrice: row.sellPrice,
+        baseCost: row.buyPrice,
+        status: (row.status === "nonaktif" ? "nonaktif" : "aktif") as "aktif" | "nonaktif",
+      });
+
+      // Create variant
+      await db.insert(productVariants).values({
+        id: crypto.randomUUID(),
+        productId,
+        sku: row.sku,
+        barcode: row.barcode || row.sku,
+        color: "-",
+        size: "-",
+        stock: row.stock,
+        minStock: row.minStock,
+        buyPrice: row.buyPrice,
+        sellPrice: row.sellPrice,
+        status: (row.status === "nonaktif" ? "nonaktif" : "aktif") as "aktif" | "nonaktif",
+      });
+
+      created++;
+    } catch {
+      errors++;
+    }
+  }
+
+  revalidatePath("/produk");
+  revalidatePath("/pos");
+
+  const currentUser = await getCurrentUser();
+  createAuditLog({
+    userId: currentUser?.id,
+    userName: currentUser?.name || "Unknown",
+    action: "produk",
+    detail: `Impor produk CSV: ${created} dibuat, ${updated} diperbarui, ${skipped} dilewati, ${errors} error`,
+    metadata: { created, updated, skipped, errors },
+  }).catch(() => {});
+
+  return { created, updated, skipped, errors };
+}
+
 export async function getAllVariantsFlat() {
   const result = await db
     .select({

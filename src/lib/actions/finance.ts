@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { financialTransactions, orders, orderItems, dailyReconciliations } from "@/db/schema";
 import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { createAuditLog } from "@/lib/actions/audit";
+import { getCurrentUser } from "@/lib/actions/auth-helpers";
 
 export async function getTransactions(filters?: {
   type?: string;
@@ -44,6 +46,17 @@ export async function createTransaction(data: {
     amount: data.amount,
     createdBy: data.createdBy || null,
   });
+
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "keuangan",
+      detail: `Transaksi ${data.type} dibuat: ${data.description} (Rp ${data.amount.toLocaleString("id-ID")})`,
+      metadata: { type: data.type, category: data.category, amount: data.amount },
+    }).catch(() => {});
+  }
 
   revalidatePath("/keuangan");
 }
@@ -87,9 +100,10 @@ export async function saveDailyReconciliation(data: {
   calculatedExpense: number;
   actualCashInHand: number;
   notes?: string;
-  reconciledBy: string;
 }) {
   const difference = data.actualCashInHand - (data.calculatedIncome - data.calculatedExpense);
+  const user = await getCurrentUser();
+  const reconciledBy = user?.id || null;
 
   // Check if reconciliation already exists for the day
   const existing = await getReconciliationLog(data.date);
@@ -102,7 +116,7 @@ export async function saveDailyReconciliation(data: {
       difference,
       notes: data.notes || null,
       status: "completed",
-      reconciledBy: data.reconciledBy,
+      reconciledBy,
       updatedAt: new Date()
     }).where(eq(dailyReconciliations.id, existing.id));
   } else {
@@ -114,8 +128,18 @@ export async function saveDailyReconciliation(data: {
       difference,
       notes: data.notes || null,
       status: "completed",
-      reconciledBy: data.reconciledBy
+      reconciledBy
     });
+  }
+
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "keuangan",
+      detail: `Rekonsiliasi harian disimpan untuk tanggal ${data.date}`,
+      metadata: { date: data.date, difference, actualCashInHand: data.actualCashInHand },
+    }).catch(() => {});
   }
 
   revalidatePath("/laporan");

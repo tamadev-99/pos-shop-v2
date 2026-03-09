@@ -4,6 +4,9 @@ import { db } from "@/db";
 import { shifts } from "@/db/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { createAuditLog } from "@/lib/actions/audit";
+import { getCurrentUser } from "@/lib/actions/auth-helpers";
+import { processRecurringExpenses } from "@/lib/actions/expense-tracker";
 
 export async function openShift(cashierId: string, openingBalance: number) {
   // Check if there's already an active shift for this cashier
@@ -23,6 +26,20 @@ export async function openShift(cashierId: string, openingBalance: number) {
     cashierId,
     openingBalance,
   });
+
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "keuangan",
+      detail: `Shift dibuka dengan saldo awal Rp ${openingBalance.toLocaleString("id-ID")}`,
+      metadata: { shiftId: id, openingBalance },
+    }).catch(() => {});
+  }
+
+  // Process recurring expenses on shift open to ensure they run at least once per business day
+  processRecurringExpenses().catch(() => {});
 
   revalidatePath("/shift");
   return { shiftId: id };
@@ -55,6 +72,17 @@ export async function closeShift(
       notes: notes || null,
     })
     .where(eq(shifts.id, id));
+
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "keuangan",
+      detail: `Shift ditutup. Selisih: Rp ${difference.toLocaleString("id-ID")}`,
+      metadata: { shiftId: id, actualClosing, expectedClosing, difference },
+    }).catch(() => {});
+  }
 
   revalidatePath("/shift");
 }

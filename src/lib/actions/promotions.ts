@@ -4,7 +4,8 @@ import { db } from "@/db";
 import { promotions } from "@/db/schema";
 import { eq, and, lte, gte, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/actions/auth-helpers";
+import { requireRole, getCurrentUser } from "@/lib/actions/auth-helpers";
+import { createAuditLog } from "@/lib/actions/audit";
 
 export async function getPromotions(filters?: { active?: boolean }) {
   if (filters?.active !== undefined) {
@@ -64,6 +65,17 @@ export async function createPromotion(data: {
     targetIds: data.targetIds || [],
   });
 
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "sistem",
+      detail: `Promosi baru dibuat: ${data.name}`,
+      metadata: { promotionId: id, name: data.name, type: data.type, value: data.value },
+    }).catch(() => {});
+  }
+
   revalidatePath("/promosi");
   return id;
 }
@@ -79,13 +91,31 @@ export async function updatePromotion(
     endDate: string;
   }>
 ) {
-  await requireRole("manager", "owner");
+  const user = await requireRole("manager", "owner");
   await db.update(promotions).set(data).where(eq(promotions.id, id));
+
+  createAuditLog({
+    userId: user.id,
+    userName: user.name || "Unknown",
+    action: "sistem",
+    detail: `Promosi diperbarui`,
+    metadata: { promotionId: id, changes: data },
+  }).catch(() => {});
+
   revalidatePath("/promosi");
 }
 
 export async function deletePromotion(id: string) {
-  await requireRole("manager", "owner");
+  const user = await requireRole("manager", "owner");
   await db.delete(promotions).where(eq(promotions.id, id));
+
+  createAuditLog({
+    userId: user.id,
+    userName: user.name || "Unknown",
+    action: "sistem",
+    detail: `Promosi dihapus`,
+    metadata: { promotionId: id },
+  }).catch(() => {});
+
   revalidatePath("/promosi");
 }

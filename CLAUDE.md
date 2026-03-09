@@ -69,5 +69,5 @@ All data mutations/queries use Next.js Server Actions (`"use server"`). Each dom
 - Currency formatting: `formatRupiah()` from `src/lib/utils.ts` (IDR, no decimals)
 - UI language is Indonesian (e.g., "Tunai" for cash, "Pesanan" for orders)
 - Path alias: `@/` maps to `src/`
-- No middleware file — auth checks happen in server actions and client-side providers
+- Middleware file — using the new method nextjs the name file is `proxy.ts`
 - Dark theme by default (`<html class="dark">`)

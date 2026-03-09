@@ -16,10 +16,16 @@ import { formatRupiah, cn } from "@/lib/utils";
 import { VariantTable } from "@/components/produk/variant-table";
 import { BarcodeScannerDialog } from "@/components/pos/barcode-scanner";
 import {
+  BarcodeLabelDialog,
+  type BarcodeLabelVariant,
+} from "@/components/produk/barcode-label-dialog";
+import {
   VariantBuilder,
   type VariantRow,
 } from "@/components/produk/variant-builder";
 import { updateProduct, createProduct, getProducts, getAllVariantsFlat } from "@/lib/actions/products";
+import { exportToCSV } from "@/lib/export-csv";
+import { ImportDialog } from "@/components/produk/import-dialog";
 import { StokTab } from "./stok-tab";
 import { KategoriTab } from "./kategori-tab";
 import { toast } from "sonner";
@@ -35,6 +41,9 @@ import {
   ScanLine,
   PackageOpen,
   X,
+  Download,
+  Upload,
+  Printer,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -145,6 +154,12 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
   const [selectedProduct, setSelectedProduct] = useState<DBProduct | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+
+  // Barcode label state
+  const [labelDialogOpen, setLabelDialogOpen] = useState(false);
+  const [labelVariants, setLabelVariants] = useState<BarcodeLabelVariant[]>([]);
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
 
   // Form state
   const [formName, setFormName] = useState("");
@@ -229,6 +244,62 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
   function closeDetail() {
     setDetailOpen(false);
     setSelectedProduct(null);
+  }
+
+  // Barcode label helpers
+  function toggleProductSelection(productId: string) {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) {
+        next.delete(productId);
+      } else {
+        next.add(productId);
+      }
+      return next;
+    });
+  }
+
+  function toggleAllProducts() {
+    if (selectedProductIds.size === filtered.length) {
+      setSelectedProductIds(new Set());
+    } else {
+      setSelectedProductIds(new Set(filtered.map((p) => p.id)));
+    }
+  }
+
+  function openLabelDialogForSelected() {
+    const variants: BarcodeLabelVariant[] = [];
+    for (const product of filtered) {
+      if (selectedProductIds.has(product.id)) {
+        for (const v of product.variants) {
+          variants.push({
+            id: v.id,
+            productName: product.name,
+            sku: v.sku,
+            barcode: v.barcode,
+            sellPrice: v.sellPrice,
+            color: v.color,
+            size: v.size,
+          });
+        }
+      }
+    }
+    setLabelVariants(variants);
+    setLabelDialogOpen(true);
+  }
+
+  function openLabelDialogForProduct(product: DBProduct) {
+    const variants: BarcodeLabelVariant[] = product.variants.map((v) => ({
+      id: v.id,
+      productName: product.name,
+      sku: v.sku,
+      barcode: v.barcode,
+      sellPrice: v.sellPrice,
+      color: v.color,
+      size: v.size,
+    }));
+    setLabelVariants(variants);
+    setLabelDialogOpen(true);
   }
 
   function resetForm() {
@@ -416,10 +487,63 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
         </div>
         <div className="flex items-center gap-2">
           {mainTab === "katalog" && (
-            <Button onClick={() => openForm()}>
-              <Plus size={15} />
-              Tambah Produk
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    const variants = await getAllVariantsFlat();
+                    exportToCSV(
+                      variants.map((v) => ({
+                        productName: v.productName,
+                        sku: v.sku,
+                        barcode: v.barcode,
+                        category: v.categoryName,
+                        brand: v.brand,
+                        sellPrice: v.sellPrice,
+                        buyPrice: v.buyPrice,
+                        stock: v.stock,
+                        minStock: v.minStock,
+                        status: v.status,
+                      })),
+                      "produk",
+                      [
+                        { key: "productName", label: "Nama Produk" },
+                        { key: "sku", label: "SKU" },
+                        { key: "barcode", label: "Barcode" },
+                        { key: "category", label: "Kategori" },
+                        { key: "brand", label: "Brand" },
+                        { key: "sellPrice", label: "Harga Jual" },
+                        { key: "buyPrice", label: "Harga Beli" },
+                        { key: "stock", label: "Stok" },
+                        { key: "minStock", label: "Stok Minimum" },
+                        { key: "status", label: "Status" },
+                      ]
+                    );
+                    toast.success("CSV berhasil diekspor");
+                  } catch {
+                    toast.error("Gagal mengekspor CSV");
+                  }
+                }}
+              >
+                <Download size={15} />
+                Ekspor CSV
+              </Button>
+              <Button variant="ghost" onClick={() => setImportOpen(true)}>
+                <Upload size={15} />
+                Impor CSV
+              </Button>
+              {selectedProductIds.size > 0 && (
+                <Button variant="secondary" onClick={openLabelDialogForSelected}>
+                  <Printer size={15} />
+                  Cetak Label ({selectedProductIds.size})
+                </Button>
+              )}
+              <Button onClick={() => openForm()}>
+                <Plus size={15} />
+                Tambah Produk
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -454,6 +578,14 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-border bg-surface">
+                    <th className="px-2 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={filtered.length > 0 && selectedProductIds.size === filtered.length}
+                        onChange={toggleAllProducts}
+                        className="w-3.5 h-3.5 rounded border-border accent-accent cursor-pointer"
+                      />
+                    </th>
                     <th className="px-3 md:px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">
                       Produk
                     </th>
@@ -483,6 +615,16 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
                       key={product.id}
                       className="border-b border-border hover:bg-white/[0.025] transition-all duration-300"
                     >
+                      {/* Checkbox */}
+                      <td className="px-2 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedProductIds.has(product.id)}
+                          onChange={() => toggleProductSelection(product.id)}
+                          className="w-3.5 h-3.5 rounded border-border accent-accent cursor-pointer"
+                        />
+                      </td>
+
                       {/* Produk */}
                       <td className="px-3 md:px-4 py-3">
                         <div className="flex items-center gap-2.5">
@@ -560,6 +702,14 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
                               className="text-destructive/60"
                             />
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openLabelDialogForProduct(product)}
+                            title="Cetak Label"
+                          >
+                            <Printer size={13} />
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -567,7 +717,7 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
                   {filtered.length === 0 && (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="px-4 py-12 text-center text-sm text-muted-foreground"
                       >
                         <Package
@@ -580,7 +730,7 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
                   )}
                   {hasMoreData && (
                     <tr>
-                      <td colSpan={7} className="p-4 text-center">
+                      <td colSpan={8} className="p-4 text-center">
                         <Button
                           variant="outline"
                           onClick={handleLoadMore}
@@ -1143,6 +1293,17 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
           setBundleScanning(false);
         }}
         lastResult={null}
+      />
+      {/* Import CSV Dialog */}
+      <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
+      {/* Barcode Label Dialog */}
+      <BarcodeLabelDialog
+        open={labelDialogOpen}
+        onClose={() => {
+          setLabelDialogOpen(false);
+          setLabelVariants([]);
+        }}
+        variants={labelVariants}
       />
     </div>
   );

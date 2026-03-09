@@ -4,7 +4,8 @@ import { db } from "@/db";
 import { storeSettings, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/actions/auth-helpers";
+import { requireRole, getCurrentUser } from "@/lib/actions/auth-helpers";
+import { createAuditLog } from "@/lib/actions/audit";
 
 export async function getSettings() {
   const settings = await db.select().from(storeSettings);
@@ -25,12 +26,14 @@ export async function getSetting(key: string) {
 }
 
 export async function updateSetting(key: string, value: unknown) {
-  await requireRole("owner");
+  const user = await requireRole("owner");
   const existing = await db
     .select()
     .from(storeSettings)
     .where(eq(storeSettings.key, key))
     .limit(1);
+
+  const oldValue = existing[0]?.value || null;
 
   if (existing.length > 0) {
     await db
@@ -43,6 +46,14 @@ export async function updateSetting(key: string, value: unknown) {
       value: value as Record<string, unknown>,
     });
   }
+
+  createAuditLog({
+    userId: user.id,
+    userName: user.name || "Unknown",
+    action: "sistem",
+    detail: `Pengaturan diperbarui: ${key}`,
+    metadata: { key, oldValue, newValue: value },
+  }).catch(() => {});
 
   revalidatePath("/", "layout");
 }
@@ -58,7 +69,16 @@ export async function getUsers() {
 }
 
 export async function updateUserRole(userId: string, role: "cashier" | "manager" | "owner") {
-  await requireRole("owner");
+  const user = await requireRole("owner");
   await db.update(users).set({ role }).where(eq(users.id, userId));
+
+  createAuditLog({
+    userId: user.id,
+    userName: user.name || "Unknown",
+    action: "sistem",
+    detail: `Role pengguna diubah ke ${role}`,
+    metadata: { targetUserId: userId, newRole: role },
+  }).catch(() => {});
+
   revalidatePath("/pengaturan");
 }

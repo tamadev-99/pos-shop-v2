@@ -284,7 +284,6 @@ export function KeuanganTab({
           calculatedExpense: todayReconciliation.expense,
           actualCashInHand: cashObj,
           notes: reconForm.notes,
-          reconciledBy: "system", // TODO: replace with active user when auth is fully passed down
         });
         toast.success("Rekonsiliasi harian berhasil disimpan");
         setReconDialogOpen(false);

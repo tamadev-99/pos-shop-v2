@@ -4,7 +4,8 @@ import { db } from "@/db";
 import { users, sessions, accounts } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/actions/auth-helpers";
+import { requireRole, getCurrentUser } from "@/lib/actions/auth-helpers";
+import { createAuditLog } from "@/lib/actions/audit";
 
 export async function getEmployees() {
     await requireRole("cashier", "manager", "owner");
@@ -12,8 +13,17 @@ export async function getEmployees() {
 }
 
 export async function updateEmployeeRole(id: string, role: "owner" | "manager" | "cashier") {
-    await requireRole("owner");
+    const user = await requireRole("owner");
     await db.update(users).set({ role }).where(eq(users.id, id));
+
+    createAuditLog({
+        userId: user.id,
+        userName: user.name || "Unknown",
+        action: "sistem",
+        detail: `Role karyawan diubah ke ${role}`,
+        metadata: { employeeId: id, newRole: role },
+    }).catch(() => {});
+
     revalidatePath("/kontak");
 }
 
@@ -33,7 +43,7 @@ export async function createEmployeeFromOwner(formData: FormData) {
         const ctx = await auth.api.getSession({
             headers: await headers()
         });
-        if (!ctx?.session || ctx.user.role !== "owner") {
+        if (!ctx?.session || (ctx.user as unknown as { role?: string }).role !== "owner") {
             return { error: "Hanya pemilik (Owner) yang diizinkan untuk menambah karyawan" };
         }
 
@@ -48,6 +58,14 @@ export async function createEmployeeFromOwner(formData: FormData) {
         if (newUser && newUser.user) {
             const castedRole = role as "owner" | "manager" | "cashier";
             await db.update(users).set({ role: castedRole }).where(eq(users.id, newUser.user.id));
+
+            createAuditLog({
+                userId: ctx.user.id,
+                userName: ctx.user.name || "Unknown",
+                action: "sistem",
+                detail: `Karyawan baru ditambahkan: ${name} (${castedRole})`,
+                metadata: { employeeId: newUser.user.id, name, email, role: castedRole },
+            }).catch(() => {});
 
             revalidatePath("/kontak");
             return { success: true, user: { ...newUser.user, role: castedRole } };
@@ -64,7 +82,7 @@ export async function createEmployeeFromOwner(formData: FormData) {
  * Toggle employee banned status. When banning, all sessions are deleted to force logout.
  */
 export async function toggleEmployeeBan(id: string, banned: boolean, reason?: string) {
-    await requireRole("owner");
+    const user = await requireRole("owner");
 
     await db.update(users).set({
         banned,
@@ -76,6 +94,14 @@ export async function toggleEmployeeBan(id: string, banned: boolean, reason?: st
         await db.delete(sessions).where(eq(sessions.userId, id));
     }
 
+    createAuditLog({
+        userId: user.id,
+        userName: user.name || "Unknown",
+        action: "sistem",
+        detail: banned ? `Karyawan dinonaktifkan` : `Karyawan diaktifkan kembali`,
+        metadata: { employeeId: id, banned, reason },
+    }).catch(() => {});
+
     revalidatePath("/kontak");
     revalidatePath("/pengaturan");
     return { success: true };
@@ -85,7 +111,7 @@ export async function toggleEmployeeBan(id: string, banned: boolean, reason?: st
  * Reset employee password. Uses better-auth's internal password hashing.
  */
 export async function resetEmployeePassword(id: string, newPassword: string) {
-    await requireRole("owner");
+    const user = await requireRole("owner");
 
     if (!newPassword || newPassword.length < 8) {
         return { error: "Password minimal 8 karakter" };
@@ -103,6 +129,14 @@ export async function resetEmployeePassword(id: string, newPassword: string) {
 
         // Also delete all sessions to force re-login
         await db.delete(sessions).where(eq(sessions.userId, id));
+
+        createAuditLog({
+            userId: user.id,
+            userName: user.name || "Unknown",
+            action: "sistem",
+            detail: `Password karyawan direset`,
+            metadata: { employeeId: id },
+        }).catch(() => {});
 
         revalidatePath("/kontak");
         return { success: true };

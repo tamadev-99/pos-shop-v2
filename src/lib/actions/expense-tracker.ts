@@ -5,6 +5,7 @@ import { expenseCategories, recurringExpenses, financialTransactions } from "@/d
 import { eq, desc, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireRole, getCurrentUser } from "@/lib/actions/auth-helpers";
+import { createAuditLog } from "@/lib/actions/audit";
 
 // ═══════════════════════════════════════════════════════════
 // Expense Categories
@@ -38,24 +39,42 @@ export async function createExpenseCategory(data: {
     name: string;
     type: "masuk" | "keluar";
 }) {
-    await requireRole("manager", "owner");
+    const user = await requireRole("manager", "owner");
     await db.insert(expenseCategories).values({
         name: data.name,
         type: data.type,
         isDefault: false,
     });
+
+    createAuditLog({
+        userId: user.id,
+        userName: user.name || "Unknown",
+        action: "keuangan",
+        detail: `Kategori pengeluaran dibuat: ${data.name}`,
+        metadata: { name: data.name, type: data.type },
+    }).catch(() => {});
+
     revalidatePath("/keuangan");
     revalidatePath("/laporan");
 }
 
 export async function deleteExpenseCategory(id: string) {
-    await requireRole("manager", "owner");
+    const user = await requireRole("manager", "owner");
     // Don't allow deleting default categories
     const cat = await db.select().from(expenseCategories).where(eq(expenseCategories.id, id));
     if (cat[0]?.isDefault) {
         throw new Error("Tidak bisa menghapus kategori bawaan");
     }
     await db.delete(expenseCategories).where(eq(expenseCategories.id, id));
+
+    createAuditLog({
+        userId: user.id,
+        userName: user.name || "Unknown",
+        action: "keuangan",
+        detail: `Kategori pengeluaran dihapus: ${cat[0]?.name || id}`,
+        metadata: { categoryId: id, name: cat[0]?.name },
+    }).catch(() => {});
+
     revalidatePath("/keuangan");
     revalidatePath("/laporan");
 }
@@ -79,8 +98,7 @@ export async function createRecurringExpense(data: {
     frequency: "harian" | "mingguan" | "bulanan" | "tahunan";
     nextDueDate: string;
 }) {
-    await requireRole("manager", "owner");
-    const user = await getCurrentUser();
+    const user = await requireRole("manager", "owner");
 
     await db.insert(recurringExpenses).values({
         description: data.description,
@@ -91,15 +109,32 @@ export async function createRecurringExpense(data: {
         createdBy: user?.id || null,
     });
 
+    createAuditLog({
+        userId: user.id,
+        userName: user.name || "Unknown",
+        action: "keuangan",
+        detail: `Pengeluaran rutin dibuat: ${data.description} (${data.frequency})`,
+        metadata: { description: data.description, amount: data.amount, frequency: data.frequency },
+    }).catch(() => {});
+
     revalidatePath("/keuangan");
 }
 
 export async function deleteRecurringExpense(id: string) {
-    await requireRole("manager", "owner");
+    const user = await requireRole("manager", "owner");
     await db
         .update(recurringExpenses)
         .set({ isActive: false })
         .where(eq(recurringExpenses.id, id));
+
+    createAuditLog({
+        userId: user.id,
+        userName: user.name || "Unknown",
+        action: "keuangan",
+        detail: `Pengeluaran rutin dihapus`,
+        metadata: { recurringExpenseId: id },
+    }).catch(() => {});
+
     revalidatePath("/keuangan");
 }
 

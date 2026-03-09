@@ -7,14 +7,20 @@ import { LowStockWarning } from "@/components/dashboard/low-stock-warning";
 import { HourlySales } from "@/components/dashboard/hourly-sales";
 import { MonthlyTrend } from "@/components/dashboard/monthly-trend";
 import { CategoryPerformance } from "@/components/dashboard/category-performance";
-import { getDashboardStats, getBestSellers } from "@/lib/actions/reports";
+import { getDashboardStats, getBestSellers, getTodaySummary } from "@/lib/actions/reports";
+import { TodaySummary } from "@/components/dashboard/today-summary";
 import { getOrders } from "@/lib/actions/orders";
+import { processRecurringExpenses } from "@/lib/actions/expense-tracker";
 
 export default async function DashboardPage() {
-  const [stats, topProductsData, recentOrdersData] = await Promise.all([
+  // Process any due recurring expenses on dashboard load
+  processRecurringExpenses().catch(() => {});
+
+  const [stats, topProductsData, recentOrdersData, todaySummary] = await Promise.all([
     getDashboardStats(),
     getBestSellers(5),
     getOrders({ limit: 5 }),
+    getTodaySummary(),
   ]);
 
   // Format best sellers into the shape expected by TopProducts
@@ -53,6 +59,9 @@ export default async function DashboardPage() {
           Ringkasan penjualan dan aktivitas toko Anda
         </p>
       </div>
+
+      {/* Today's Summary */}
+      <TodaySummary data={todaySummary} />
 
       {/* Stats — 6 cards in 3-column grid */}
       <StatsCards stats={stats} />

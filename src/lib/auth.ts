@@ -2,6 +2,8 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { createAuditLog } from "@/lib/actions/audit";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -31,6 +33,30 @@ export const auth = betterAuth({
         required: false,
         defaultValue: "cashier",
         input: false,
+      },
+    },
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        after: async (session) => {
+          const s = session as unknown as { userId: string };
+          const user = await db
+            .select({ id: schema.users.id, name: schema.users.name, email: schema.users.email })
+            .from(schema.users)
+            .where(eq(schema.users.id, s.userId))
+            .limit(1);
+
+          if (user[0]) {
+            createAuditLog({
+              userId: user[0].id,
+              userName: user[0].name || "Unknown",
+              action: "login",
+              detail: `${user[0].name || user[0].email} berhasil login`,
+              metadata: { email: user[0].email },
+            }).catch(() => {});
+          }
+        },
       },
     },
   },

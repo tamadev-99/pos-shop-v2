@@ -17,6 +17,7 @@ import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
 import { getCurrentUser } from "@/lib/actions/auth-helpers";
 import { checkLowStock } from "@/lib/actions/notifications";
+import { recalculateTier } from "@/lib/actions/customers";
 
 
 export interface CreateOrderParams {
@@ -133,7 +134,7 @@ export async function createOrder(data: CreateOrderParams) {
     }
   }
 
-  // Update customer spending & points
+  // Update customer spending & points, then recalculate tier
   if (data.customerId) {
     const pointsEarned = Math.floor(data.total / 1000);
     await db
@@ -144,6 +145,9 @@ export async function createOrder(data: CreateOrderParams) {
         lastPurchase: today,
       })
       .where(eq(customers.id, data.customerId));
+
+    // Auto-upgrade tier based on new totalSpent
+    recalculateTier(data.customerId).catch(() => {});
   }
 
   // Create financial transaction

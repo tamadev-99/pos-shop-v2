@@ -11,7 +11,8 @@ import {
 } from "@/db/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/actions/auth-helpers";
+import { requireRole, getCurrentUser } from "@/lib/actions/auth-helpers";
+import { createAuditLog } from "@/lib/actions/audit";
 
 function generatePOId() {
   const now = new Date();
@@ -94,6 +95,17 @@ export async function createPurchaseOrder(data: {
     })
     .where(eq(suppliers.id, data.supplierId));
 
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "keuangan",
+      detail: `Purchase order dibuat: ${poId}`,
+      metadata: { poId, supplierId: data.supplierId, total, itemCount: data.items.length },
+    }).catch(() => {});
+  }
+
   revalidatePath("/pembelian");
   return poId;
 }
@@ -137,6 +149,17 @@ export async function updatePOStatus(
         }
       }
     }
+  }
+
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "keuangan",
+      detail: `Status PO ${id} diubah ke ${status}`,
+      metadata: { poId: id, status, note },
+    }).catch(() => {});
   }
 
   revalidatePath("/pembelian");

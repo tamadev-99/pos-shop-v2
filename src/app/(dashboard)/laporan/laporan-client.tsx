@@ -23,6 +23,7 @@ import { exportToCSV } from "@/lib/export-csv";
 import { exportToExcel } from "@/lib/export-excel";
 import { HutangTab } from "./components/hutang-tab";
 import { PajakTab } from "./components/pajak-tab";
+import { AnalitikTab } from "./analitik-tab";
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -148,6 +149,7 @@ const TAB_OPTIONS = [
   { label: "Keuangan", value: "keuangan" },
   { label: "Hutang", value: "hutang" },
   { label: "Pajak", value: "pajak" },
+  { label: "Analitik", value: "analitik" },
 ];
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
@@ -394,6 +396,9 @@ export default function LaporanClient({
         )}
         {activeTab === "pajak" && (
           <PajakTab />
+        )}
+        {activeTab === "analitik" && (
+          <AnalitikTab />
         )}
       </div>
     </div>

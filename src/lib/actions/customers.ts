@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { customers } from "@/db/schema";
 import { eq, like, and, desc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { createAuditLog } from "@/lib/actions/audit";
+import { getCurrentUser } from "@/lib/actions/auth-helpers";
 
 export async function getCustomers(filters?: { search?: string; tier?: string }) {
   const conditions = [];
@@ -47,6 +49,17 @@ export async function createCustomer(data: {
     joinDate: today,
   });
 
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "pelanggan",
+      detail: `Pelanggan baru ditambahkan: ${data.name}`,
+      metadata: { customerId: id, name: data.name, phone: data.phone },
+    }).catch(() => {});
+  }
+
   revalidatePath("/pelanggan");
   return id;
 }
@@ -62,6 +75,18 @@ export async function updateCustomer(
   }>
 ) {
   await db.update(customers).set(data).where(eq(customers.id, id));
+
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "pelanggan",
+      detail: `Data pelanggan diperbarui`,
+      metadata: { customerId: id, changes: data },
+    }).catch(() => {});
+  }
+
   revalidatePath("/pelanggan");
 }
 
@@ -72,6 +97,17 @@ export async function addLoyaltyPoints(customerId: string, points: number) {
       points: sql`${customers.points} + ${points}`,
     })
     .where(eq(customers.id, customerId));
+
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "pelanggan",
+      detail: `Poin loyalitas ditambahkan: +${points} poin`,
+      metadata: { customerId, pointsAdded: points },
+    }).catch(() => {});
+  }
 
   await recalculateTier(customerId);
   revalidatePath("/pelanggan");
@@ -84,6 +120,17 @@ export async function redeemPoints(customerId: string, points: number) {
       points: sql`${customers.points} - ${points}`,
     })
     .where(eq(customers.id, customerId));
+
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "pelanggan",
+      detail: `Poin loyalitas ditukarkan: -${points} poin`,
+      metadata: { customerId, pointsRedeemed: points },
+    }).catch(() => {});
+  }
 
   revalidatePath("/pelanggan");
 }
@@ -103,6 +150,19 @@ export async function recalculateTier(customerId: string) {
   if (spent >= 10000000) tier = "Platinum";
   else if (spent >= 5000000) tier = "Gold";
   else if (spent >= 2000000) tier = "Silver";
+
+  if (tier !== customer[0].tier) {
+    const user = await getCurrentUser();
+    if (user) {
+      createAuditLog({
+        userId: user.id,
+        userName: user.name || "Unknown",
+        action: "pelanggan",
+        detail: `Tier pelanggan berubah: ${customer[0].tier} → ${tier}`,
+        metadata: { customerId, oldTier: customer[0].tier, newTier: tier },
+      }).catch(() => {});
+    }
+  }
 
   await db.update(customers).set({ tier }).where(eq(customers.id, customerId));
 }

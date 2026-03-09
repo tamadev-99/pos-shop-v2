@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { suppliers, supplierCategories } from "@/db/schema";
 import { eq, like, and, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { createAuditLog } from "@/lib/actions/audit";
+import { getCurrentUser } from "@/lib/actions/auth-helpers";
 
 export async function getSuppliers(filters?: { search?: string; status?: string }) {
   const conditions = [];
@@ -85,6 +87,17 @@ export async function createSupplier(data: {
     );
   }
 
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "supplier",
+      detail: `Supplier baru ditambahkan: ${data.name}`,
+      metadata: { supplierId: id, name: data.name },
+    }).catch(() => {});
+  }
+
   revalidatePath("/supplier");
   return id;
 }
@@ -101,5 +114,17 @@ export async function updateSupplier(
   }>
 ) {
   await db.update(suppliers).set(data).where(eq(suppliers.id, id));
+
+  const user = await getCurrentUser();
+  if (user) {
+    createAuditLog({
+      userId: user.id,
+      userName: user.name || "Unknown",
+      action: "supplier",
+      detail: `Data supplier diperbarui`,
+      metadata: { supplierId: id, changes: data },
+    }).catch(() => {});
+  }
+
   revalidatePath("/supplier");
 }
