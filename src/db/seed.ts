@@ -212,6 +212,12 @@ async function seed() {
     { key: "printerTarget", value: "POS-58 Thermal Printer" },
     { key: "currency", value: "IDR" },
     { key: "loyaltyPointsRate", value: 1000 },
+    { key: "memberTiers", value: JSON.stringify([
+      { name: "Bronze", minPoints: 0, discount: 0, benefit: "Member dasar" },
+      { name: "Silver", minPoints: 500, discount: 2, benefit: "Diskon 2% untuk semua produk" },
+      { name: "Gold", minPoints: 1000, discount: 5, benefit: "Diskon 5% untuk semua produk" },
+      { name: "Platinum", minPoints: 2000, discount: 10, benefit: "Diskon 10% untuk semua produk" },
+    ]) },
   ];
 
   for (const s of defaultSettings) {

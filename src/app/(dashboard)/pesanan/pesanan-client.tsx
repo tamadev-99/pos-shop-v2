@@ -42,6 +42,8 @@ interface DBOrder {
   paymentMethod: "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewallet";
   cashPaid: number | null;
   changeAmount: number | null;
+  bankName: string | null;
+  referenceNumber: string | null;
   cashierId: string | null;
   shiftId: string | null;
   notes: string | null;
@@ -63,6 +65,9 @@ interface Order {
   discountAmount: number;
   cashPaid: number | null;
   changeAmount: number | null;
+  bankName: string | null;
+  referenceNumber: string | null;
+  notes: string | null;
 }
 
 const paymentMethodLabels: Record<string, string> = {
@@ -99,6 +104,9 @@ function mapDBOrderToOrder(dbOrder: DBOrder): Order {
     discountAmount: dbOrder.discountAmount,
     cashPaid: dbOrder.cashPaid,
     changeAmount: dbOrder.changeAmount,
+    bankName: dbOrder.bankName,
+    referenceNumber: dbOrder.referenceNumber,
+    notes: dbOrder.notes,
   };
 }
 
@@ -428,7 +436,13 @@ export default function PesananClient({ initialOrders, initialReturns, totalOrde
                       <p className="text-[11px] text-muted-dim uppercase tracking-wider">Metode</p>
                       <p className="text-xs font-medium text-foreground mt-0.5">
                         {selectedOrder.method}
+                        {selectedOrder.bankName && ` - ${selectedOrder.bankName}`}
                       </p>
+                      {selectedOrder.referenceNumber && (
+                        <p className="text-[10px] text-muted-dim font-num mt-0.5">
+                          Ref: ****{selectedOrder.referenceNumber}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <p className="text-[11px] text-muted-dim uppercase tracking-wider">Status</p>
@@ -514,6 +528,29 @@ export default function PesananClient({ initialOrders, initialReturns, totalOrde
                       {formatRupiah(selectedOrder.total)}
                     </span>
                   </div>
+
+                  {selectedOrder.cashPaid !== null && selectedOrder.changeAmount !== null && (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center px-1">
+                        <span className="text-xs text-muted-foreground">Uang Tunai</span>
+                        <span className="text-xs font-num text-foreground">
+                          {formatRupiah(selectedOrder.cashPaid)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center px-1">
+                        <span className="text-xs text-muted-foreground">Kembalian</span>
+                        <span className="text-xs font-num text-success">
+                          {formatRupiah(selectedOrder.changeAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedOrder.notes && (
+                    <div className="px-1">
+                      <p className="text-[10px] text-muted-dim italic">{selectedOrder.notes}</p>
+                    </div>
+                  )}
 
                   <div className="flex gap-2 w-full mt-4">
                     <Button

@@ -19,10 +19,8 @@ type PaymentMethod = "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewall
 
 const methods: { id: PaymentMethod; label: string; icon: React.ElementType }[] = [
   { id: "tunai", label: "Tunai", icon: Banknote },
-  { id: "debit", label: "Debit", icon: CreditCard },
-  { id: "kredit", label: "Kredit", icon: CreditCard },
-  { id: "transfer", label: "Transfer", icon: Building2 },
-  { id: "qris", label: "QRIS", icon: QrCode },
+  { id: "debit", label: "Debit Card", icon: CreditCard },
+  { id: "kredit", label: "Kredit Card", icon: CreditCard },
   { id: "ewallet", label: "E-Wallet", icon: Wallet },
 ];
 
@@ -30,10 +28,12 @@ const quickAmounts = [50000, 100000, 200000, 500000];
 
 const ewalletOptions = ["GoPay", "OVO", "DANA", "ShopeePay"];
 
+const bankOptions = ["BCA", "MANDIRI", "BRI", "BNI", "CIMB", "Lainnya"];
+
 const paymentMethodLabels: Record<string, string> = {
   tunai: "Tunai",
-  debit: "Debit",
-  kredit: "Kredit",
+  debit: "Debit Card",
+  kredit: "Kredit Card",
   transfer: "Transfer",
   qris: "QRIS",
   ewallet: "E-Wallet",
@@ -72,7 +72,7 @@ interface PaymentDialogProps {
   discountAmount?: number;
   taxMode?: string;
   taxName?: string;
-  onConfirm: (paymentMethod: PaymentMethod, cashPaid?: number, changeAmount?: number, splitNote?: string) => Promise<void> | void;
+  onConfirm: (paymentMethod: PaymentMethod, cashPaid?: number, changeAmount?: number, splitNote?: string, bankName?: string, referenceNumber?: string) => Promise<void> | void;
 }
 
 export function PaymentDialog({
@@ -90,6 +90,8 @@ export function PaymentDialog({
   const [method, setMethod] = useState<PaymentMethod>("tunai");
   const [cashAmount, setCashAmount] = useState("");
   const [selectedEwallet, setSelectedEwallet] = useState("GoPay");
+  const [selectedBank, setSelectedBank] = useState("");
+  const [refNumber, setRefNumber] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Split payment state
@@ -137,15 +139,29 @@ export function PaymentDialog({
       if (isSplit) {
         // Use first split's method as primary, put full details in splitNote
         const primaryMethod = splits[0]?.method || "tunai";
-        const splitNote = "Split: " + splits.map(s =>
-          `${paymentMethodLabels[s.method]} ${formatRupiah(s.amount)}`
-        ).join(" + ");
+        const splitNote = "Split: " + splits.map(s => {
+          let label = paymentMethodLabels[s.method];
+          if ((s.method === "debit" || s.method === "kredit") && selectedBank) {
+            label += ` (${selectedBank}${refNumber ? ` *${refNumber}` : ""})`;
+          }
+          if (s.method === "ewallet") {
+            label += ` (${selectedEwallet})`;
+          }
+          return `${label} ${formatRupiah(s.amount)}`;
+        }).join(" + ");
         await onConfirm(primaryMethod, undefined, undefined, splitNote);
       } else {
+        const bankName = (method === "debit" || method === "kredit") ? selectedBank
+          : method === "ewallet" ? selectedEwallet
+          : undefined;
+        const ref = (method === "debit" || method === "kredit") ? refNumber || undefined : undefined;
         await onConfirm(
           method,
           method === "tunai" ? cashNum : undefined,
-          method === "tunai" && change > 0 ? change : undefined
+          method === "tunai" && change > 0 ? change : undefined,
+          undefined,
+          bankName,
+          ref
         );
       }
     } finally {
@@ -156,13 +172,17 @@ export function PaymentDialog({
   const handleClose = () => {
     setCashAmount("");
     setMethod("tunai");
+    setSelectedBank("");
+    setRefNumber("");
     setIsSplit(false);
     setSplits([]);
     setSplitAmount("");
     onClose();
   };
 
-  const canConfirmSingle = method === "tunai" ? cashNum >= total : true;
+  const canConfirmSingle = method === "tunai" ? cashNum >= total
+    : (method === "debit" || method === "kredit") ? !!selectedBank
+    : true;
   const canConfirmSplit = splitTotal >= total;
 
   return (
@@ -386,6 +406,53 @@ export function PaymentDialog({
                   </div>
                 </div>
                 <p className="text-[10px] text-muted-dim mt-2">Konfirmasi pembayaran setelah transfer berhasil</p>
+              </div>
+            )}
+
+            {/* Debit/Kredit — Bank selection + ref number */}
+            {(method === "debit" || method === "kredit") && (
+              <div className="space-y-3">
+                <p className="text-xs font-medium text-muted-foreground">Pilih Bank</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {bankOptions.map((bank) => (
+                    <button
+                      key={bank}
+                      onClick={() => setSelectedBank(bank)}
+                      className={cn(
+                        "flex items-center justify-center gap-1.5 rounded-xl border p-2.5 text-xs font-medium transition-all cursor-pointer",
+                        selectedBank === bank
+                          ? "border-accent/25 bg-accent/[0.08] text-accent"
+                          : "border-white/[0.06] text-muted-foreground hover:text-foreground hover:bg-white/[0.04]"
+                      )}
+                    >
+                      <Building2 size={12} />
+                      {bank}
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    No. Referensi <span className="text-muted-dim">(4 digit, opsional)</span>
+                  </p>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="1234"
+                    maxLength={4}
+                    value={refNumber}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "");
+                      setRefNumber(val);
+                    }}
+                    className="text-center text-lg font-num font-bold h-12 max-w-[140px]"
+                  />
+                </div>
+                {selectedBank && (
+                  <p className="text-[10px] text-muted-dim">
+                    {method === "debit" ? "Debit" : "Kredit"} Card — {selectedBank}
+                    {refNumber ? ` *${refNumber}` : ""}
+                  </p>
+                )}
               </div>
             )}
 

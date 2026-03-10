@@ -29,8 +29,9 @@ import {
   CalendarRange,
   ShoppingBag,
   Loader2,
+  Info,
 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -203,7 +204,8 @@ export default function PromosiClient({ initialPromotions }: Props) {
   // Delete confirm
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const promotions = initialPromotions;
+  const [promotions, setPromotions] = useState(initialPromotions);
+  useEffect(() => { setPromotions(initialPromotions); }, [initialPromotions]);
 
   const filtered = promotions.filter((p) => {
     if (tab === "all") return true;
@@ -385,11 +387,25 @@ export default function PromosiClient({ initialPromotions }: Props) {
                 {/* Value */}
                 <div className="px-3 py-2 rounded-xl bg-card border border-border">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {promo.type === "buy_x_get_y" ? "Promo" : "Nilai Diskon"}
+                    {promo.type === "buy_x_get_y"
+                      ? "Promo"
+                      : promo.type === "bundle"
+                        ? "Harga Paket"
+                        : "Nilai Diskon"}
                   </p>
                   <p className="text-lg font-bold font-num text-foreground mt-0.5">
                     {getPromoValueLabel(promo)}
                   </p>
+                  {promo.type === "buy_x_get_y" && (
+                    <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                      Beli {(promo.buyQty ?? 0) + (promo.getQty ?? 0)} item, bayar {promo.buyQty ?? 0} saja
+                    </p>
+                  )}
+                  {promo.type === "bundle" && (
+                    <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                      Harga spesial paket bundle
+                    </p>
+                  )}
                 </div>
 
                 {/* Details */}
@@ -508,59 +524,143 @@ export default function PromosiClient({ initialPromotions }: Props) {
             />
           </div>
 
-          {formType === "buy_x_get_y" ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Jumlah Beli
-                </label>
-                <Input
-                  type="number"
-                  placeholder="2"
-                  value={formBuyQty}
-                  onChange={(e) => setFormBuyQty(e.target.value)}
-                  required
-                />
+          {/* ---- Type-specific fields ---- */}
+          {formType === "buy_x_get_y" && (
+            <div className="space-y-3">
+              {/* Info box */}
+              <div className="flex gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <Info size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-[11px] text-amber-200/80 space-y-1">
+                  <p className="font-medium text-amber-300">Cara kerja Beli X Gratis Y:</p>
+                  <p>Pelanggan membeli sejumlah produk tertentu dan mendapatkan produk gratis. Contoh: <strong>Beli 2 Gratis 1</strong> — pelanggan membeli 3 item, hanya bayar 2.</p>
+                  <p>Produk gratis akan otomatis dipilih dari item termurah di keranjang.</p>
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Jumlah Gratis
-                </label>
-                <Input
-                  type="number"
-                  placeholder="1"
-                  value={formGetQty}
-                  onChange={(e) => setFormGetQty(e.target.value)}
-                  required
-                />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Jumlah Beli (X)
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="2"
+                    value={formBuyQty}
+                    onChange={(e) => setFormBuyQty(e.target.value)}
+                    required
+                  />
+                  <p className="text-[10px] text-muted-foreground/60">Jumlah item yang harus dibeli</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Jumlah Gratis (Y)
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="1"
+                    value={formGetQty}
+                    onChange={(e) => setFormGetQty(e.target.value)}
+                    required
+                  />
+                  <p className="text-[10px] text-muted-foreground/60">Jumlah item yang digratiskan</p>
+                </div>
               </div>
+
+              {/* Preview */}
+              {formBuyQty && formGetQty && (
+                <div className="p-2.5 rounded-lg bg-card border border-border text-center">
+                  <p className="text-xs text-muted-foreground">Preview promosi:</p>
+                  <p className="text-sm font-semibold text-amber-400 mt-0.5">
+                    Beli {formBuyQty} Gratis {formGetQty}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                    Pelanggan beli {parseInt(formBuyQty) + parseInt(formGetQty)} item, bayar {formBuyQty} item saja
+                  </p>
+                </div>
+              )}
             </div>
-          ) : (
+          )}
+
+          {formType === "bundle" && (
+            <div className="space-y-3">
+              {/* Info box */}
+              <div className="flex gap-2 p-3 rounded-xl bg-violet-500/10 border border-violet-500/20">
+                <Info size={14} className="text-violet-400 shrink-0 mt-0.5" />
+                <div className="text-[11px] text-violet-200/80 space-y-1">
+                  <p className="font-medium text-violet-300">Cara kerja Bundle:</p>
+                  <p>Beberapa produk dijual bersama dalam satu paket dengan <strong>harga spesial</strong> yang lebih murah dari total harga individual.</p>
+                  <p>Contoh: Shampoo (Rp25.000) + Conditioner (Rp20.000) = Bundle <strong>Rp40.000</strong> (hemat Rp5.000).</p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Harga Bundle (Rp)
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="Contoh: 40000"
+                  value={formValue}
+                  onChange={(e) => setFormValue(e.target.value)}
+                  required
+                />
+                <p className="text-[10px] text-muted-foreground/60">
+                  Harga total paket bundle yang akan dikenakan ke pelanggan
+                </p>
+              </div>
+
+              {/* Preview */}
+              {formValue && (
+                <div className="p-2.5 rounded-lg bg-card border border-border text-center">
+                  <p className="text-xs text-muted-foreground">Harga bundle:</p>
+                  <p className="text-sm font-semibold text-violet-400 mt-0.5">
+                    {formatRupiah(parseInt(formValue) || 0)}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {(formType === "percentage" || formType === "fixed") && (
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">
                 {valueLabel}
               </label>
               <Input
                 type="number"
-                placeholder="0"
+                min="0"
+                placeholder={formType === "percentage" ? "Contoh: 10" : "Contoh: 5000"}
                 value={formValue}
                 onChange={(e) => setFormValue(e.target.value)}
                 required
               />
+              <p className="text-[10px] text-muted-foreground/60">
+                {formType === "percentage"
+                  ? "Persentase diskon yang diberikan (1-100%)"
+                  : "Potongan harga dalam Rupiah"}
+              </p>
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">
-              Min. Pembelian (Rp)
-            </label>
-            <Input
-              type="number"
-              placeholder="0 (opsional)"
-              value={formMinPurchase}
-              onChange={(e) => setFormMinPurchase(e.target.value)}
-            />
-          </div>
+          {formType !== "buy_x_get_y" && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                Min. Pembelian (Rp)
+              </label>
+              <Input
+                type="number"
+                placeholder="0 (opsional)"
+                value={formMinPurchase}
+                onChange={(e) => setFormMinPurchase(e.target.value)}
+              />
+              <p className="text-[10px] text-muted-foreground/60">
+                Minimum total belanja agar promosi berlaku (kosongkan jika tidak ada minimum)
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

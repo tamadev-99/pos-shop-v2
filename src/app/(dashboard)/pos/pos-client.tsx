@@ -77,12 +77,26 @@ interface CustomerData {
   totalSpent: number;
 }
 
-const TIER_DISCOUNTS: Record<string, number> = {
+const DEFAULT_TIER_DISCOUNTS: Record<string, number> = {
   Bronze: 0,
   Silver: 2,
   Gold: 5,
   Platinum: 10,
 };
+
+function parseTierDiscounts(storeSettings?: { memberTiers?: any; [key: string]: any }): Record<string, number> {
+  try {
+    const raw = storeSettings?.memberTiers;
+    const tiers: { name: string; discount: number }[] =
+      typeof raw === "string" ? JSON.parse(raw) : Array.isArray(raw) ? raw : null;
+    if (tiers && tiers.length > 0) {
+      const map: Record<string, number> = {};
+      for (const t of tiers) map[t.name] = t.discount;
+      return map;
+    }
+  } catch {}
+  return DEFAULT_TIER_DISCOUNTS;
+}
 
 function mapDBProductToProduct(dbProduct: DBProduct): Product {
   return {
@@ -150,6 +164,8 @@ export default function POSClient({ initialProducts, customers, promotions, prin
     [initialProducts]
   );
 
+  const TIER_DISCOUNTS = useMemo(() => parseTierDiscounts(storeSettings), [storeSettings]);
+
   const categoryOptions = useMemo(() => {
     const uniqueCategories = [
       ...new Set(initialProducts.map((p) => p.category?.name).filter(Boolean)),
@@ -177,7 +193,8 @@ export default function POSClient({ initialProducts, customers, promotions, prin
   const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Promotion & discount state
-  const [selectedPromo, setSelectedPromo] = useState<Promotion | null>(null);
+  // undefined = user hasn't chosen (auto-apply), null = user explicitly chose "no promo"
+  const [selectedPromo, setSelectedPromo] = useState<Promotion | null | undefined>(undefined);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
 
   // Receipt state
@@ -195,6 +212,9 @@ export default function POSClient({ initialProducts, customers, promotions, prin
     customerPhone?: string;
     cashPaid?: number;
     changeAmount?: number;
+    bankName?: string;
+    referenceNumber?: string;
+    splitNote?: string;
   } | null>(null);
 
   const filteredProducts = useMemo(() => {
@@ -353,8 +373,9 @@ export default function POSClient({ initialProducts, customers, promotions, prin
   }, [cart, promotions, subtotal]);
 
   // Use manual selection if set, otherwise auto-apply
-  const effectivePromo = selectedPromo || autoAppliedPromo;
-  const isAutoPromo = !selectedPromo && !!autoAppliedPromo;
+  // undefined = user hasn't touched it (auto-apply), null = user chose "no promo"
+  const effectivePromo = selectedPromo === undefined ? autoAppliedPromo : selectedPromo;
+  const isAutoPromo = selectedPromo === undefined && !!autoAppliedPromo;
   const promoDiscount = effectivePromo ? calcPromoDiscount(effectivePromo) : 0;
 
   // Points: 1 point = Rp 1, cannot exceed subtotal
@@ -402,7 +423,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
     return true;
   }, [activeShiftId]);
 
-  const handlePaymentConfirm = async (paymentMethod: "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewallet", cashPaid?: number, changeAmount?: number, splitNote?: string) => {
+  const handlePaymentConfirm = async (paymentMethod: "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewallet", cashPaid?: number, changeAmount?: number, splitNote?: string, bankName?: string, referenceNumber?: string) => {
     try {
       const orderItems = cart.map((item) => {
         const found = findDBVariant(item.variantId);
@@ -426,6 +447,10 @@ export default function POSClient({ initialProducts, customers, promotions, prin
         shippingFee,
         total,
         paymentMethod,
+        bankName: bankName || undefined,
+        referenceNumber: referenceNumber || undefined,
+        cashPaid,
+        changeAmount,
         cashierId: user?.id,
         shiftId: activeShiftId || undefined,
         notes: splitNote || undefined,
@@ -456,6 +481,9 @@ export default function POSClient({ initialProducts, customers, promotions, prin
         customerPhone: selectedCustomerData?.phone,
         cashPaid,
         changeAmount,
+        bankName,
+        referenceNumber,
+        splitNote,
       });
       setReceiptOpen(true);
       setPaymentOpen(false);
@@ -477,7 +505,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
       setCartOpen(false);
       setShippingFee(0);
       setSelectedCustomer("");
-      setSelectedPromo(null);
+      setSelectedPromo(undefined);
       setPointsToRedeem(0);
       setLastOrderId(null);
     }
@@ -506,7 +534,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
       setCart([]);
       setShippingFee(0);
       setSelectedCustomer("");
-      setSelectedPromo(null);
+      setSelectedPromo(undefined);
       setPointsToRedeem(0);
       toast.success("Transaksi berhasil ditahan");
     } catch (error) {
@@ -792,7 +820,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
             setCartOpen(false);
             setShippingFee(0);
             setSelectedCustomer("");
-            setSelectedPromo(null);
+            setSelectedPromo(undefined);
             setPointsToRedeem(0);
             setLastOrderId(null);
             setReceiptData(null);
@@ -809,6 +837,9 @@ export default function POSClient({ initialProducts, customers, promotions, prin
           customerPhone={receiptData.customerPhone}
           cashPaid={receiptData.cashPaid}
           changeAmount={receiptData.changeAmount}
+          bankName={receiptData.bankName}
+          referenceNumber={receiptData.referenceNumber}
+          notes={receiptData.splitNote}
           cashierName={user?.name || "Kasir"}
           storeName={storeSettings?.storeName}
           storeAddress={storeSettings?.receiptAddress}

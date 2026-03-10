@@ -25,6 +25,9 @@ interface Order {
     paymentMethod: string;
     cashPaid?: number | null;
     changeAmount?: number | null;
+    bankName?: string | null;
+    referenceNumber?: string | null;
+    notes?: string | null;
 }
 
 interface ReceiptClientProps {
@@ -170,6 +173,20 @@ export function ReceiptClient({ order, store }: ReceiptClientProps) {
                             <span className="text-muted-foreground">Metode Pembayaran</span>
                             <span className="font-medium capitalize text-foreground">{order.paymentMethod}</span>
                         </div>
+                        {order.bankName && (
+                            <div className="flex justify-between text-sm mb-1.5">
+                                <span className="text-muted-foreground">
+                                    {order.paymentMethod === "ewallet" ? "E-Wallet" : "Bank"}
+                                </span>
+                                <span className="font-medium text-foreground">{order.bankName}</span>
+                            </div>
+                        )}
+                        {order.referenceNumber && (
+                            <div className="flex justify-between text-sm mb-1.5">
+                                <span className="text-muted-foreground">Ref</span>
+                                <span className="font-medium text-foreground font-num">****{order.referenceNumber}</span>
+                            </div>
+                        )}
                         {order.paymentMethod === "tunai" && order.cashPaid && (
                             <>
                                 <div className="flex justify-between text-sm mb-1.5">
@@ -181,6 +198,9 @@ export function ReceiptClient({ order, store }: ReceiptClientProps) {
                                     <span className="font-medium text-success">{formatRupiah(order.changeAmount || 0)}</span>
                                 </div>
                             </>
+                        )}
+                        {order.notes && (
+                            <p className="text-xs text-muted-foreground italic mt-2">{order.notes}</p>
                         )}
                         <div className="flex items-center gap-2 mt-4 pt-3 border-t border-border/50 justify-center">
                             <CheckCircle2 size={16} className="text-success" />

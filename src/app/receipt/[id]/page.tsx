@@ -41,6 +41,9 @@ export default async function DynamicReceiptPage({
                 paymentMethod: order.paymentMethod,
                 cashPaid: order.cashPaid ?? null,
                 changeAmount: order.changeAmount ?? null,
+                bankName: order.bankName ?? null,
+                referenceNumber: order.referenceNumber ?? null,
+                notes: order.notes ?? null,
             }}
             store={{
                 name: (storeName as string) || "KasirPro",

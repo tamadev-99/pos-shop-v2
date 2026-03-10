@@ -9,11 +9,13 @@ import { KaryawanTab } from "./karyawan-tab";
 interface KontakClientProps {
     initialCustomers: any[];
     initialEmployees: any[];
+    memberTiers?: any[];
 }
 
 export default function KontakClient({
     initialCustomers,
     initialEmployees,
+    memberTiers,
 }: KontakClientProps) {
     const { user } = useAuth();
     const [mainTab, setMainTab] = useState("pelanggan");
@@ -47,7 +49,7 @@ export default function KontakClient({
 
             {mainTab === "pelanggan" && (
                 <div className="animate-fade-up" style={{ animationDelay: "60ms" }}>
-                    <PelangganTab initialCustomers={initialCustomers} />
+                    <PelangganTab initialCustomers={initialCustomers} memberTiers={memberTiers} />
                 </div>
             )}
 

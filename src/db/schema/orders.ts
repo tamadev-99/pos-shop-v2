@@ -24,6 +24,8 @@ export const orders = pgTable("orders", {
   cashierId: text("cashier_id").references(() => users.id),
   shiftId: text("shift_id"),
   notes: text("notes"),
+  bankName: text("bank_name"),
+  referenceNumber: text("reference_number"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -51,8 +51,16 @@ interface Customer {
   createdAt: Date;
 }
 
+interface MemberTierConfig {
+  name: string;
+  minPoints: number;
+  discount: number;
+  benefit: string;
+}
+
 export interface PelangganTabProps {
   initialCustomers: Customer[];
+  memberTiers?: MemberTierConfig[];
 }
 
 // ---------------------------------------------------------------------------
@@ -66,33 +74,40 @@ const tierBadgeVariant: Record<Tier, BadgeVariant> = {
   Platinum: "success",
 };
 
-const tierThresholds: { tier: Tier; min: number; max: number }[] = [
-  { tier: "Bronze", min: 0, max: 499 },
-  { tier: "Silver", min: 500, max: 999 },
-  { tier: "Gold", min: 1000, max: 1999 },
-  { tier: "Platinum", min: 2000, max: 2000 },
+const DEFAULT_MEMBER_TIERS: MemberTierConfig[] = [
+  { name: "Bronze", minPoints: 0, discount: 0, benefit: "Member dasar" },
+  { name: "Silver", minPoints: 500, discount: 2, benefit: "Diskon 2% untuk semua produk" },
+  { name: "Gold", minPoints: 1000, discount: 5, benefit: "Diskon 5% untuk semua produk" },
+  { name: "Platinum", minPoints: 2000, discount: 10, benefit: "Diskon 10% untuk semua produk" },
 ];
 
-function getNextTier(tier: Tier): { name: string; target: number } | null {
-  switch (tier) {
-    case "Bronze":
-      return { name: "Silver", target: 500 };
-    case "Silver":
-      return { name: "Gold", target: 1000 };
-    case "Gold":
-      return { name: "Platinum", target: 2000 };
-    case "Platinum":
-      return null;
-  }
+function buildTierThresholds(tiers: MemberTierConfig[]): { tier: Tier; min: number; max: number }[] {
+  return tiers.map((t, i) => ({
+    tier: t.name as Tier,
+    min: t.minPoints,
+    max: i < tiers.length - 1 ? tiers[i + 1].minPoints - 1 : t.minPoints,
+  }));
 }
 
-function getTierProgress(tier: Tier, points: number): number {
-  const next = getNextTier(tier);
-  if (!next) return 100;
-  const current = tierThresholds.find((t) => t.tier === tier)!;
-  const range = next.target - current.min;
-  const progress = points - current.min;
-  return Math.min(Math.round((progress / range) * 100), 100);
+function buildGetNextTier(tiers: MemberTierConfig[]) {
+  return (tier: Tier): { name: string; target: number } | null => {
+    const idx = tiers.findIndex((t) => t.name === tier);
+    if (idx < 0 || idx >= tiers.length - 1) return null;
+    return { name: tiers[idx + 1].name, target: tiers[idx + 1].minPoints };
+  };
+}
+
+function buildGetTierProgress(tiers: MemberTierConfig[]) {
+  const thresholds = buildTierThresholds(tiers);
+  const getNextTier = buildGetNextTier(tiers);
+  return (tier: Tier, points: number): number => {
+    const next = getNextTier(tier);
+    if (!next) return 100;
+    const current = thresholds.find((t) => t.tier === tier)!;
+    const range = next.target - current.min;
+    const progress = points - current.min;
+    return Math.min(Math.round((progress / range) * 100), 100);
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -101,8 +116,13 @@ function getTierProgress(tier: Tier, points: number): number {
 
 export function PelangganTab({
   initialCustomers,
+  memberTiers: memberTiersProp,
 }: PelangganTabProps) {
   const router = useRouter();
+  const activeTiers = memberTiersProp && memberTiersProp.length > 0 ? memberTiersProp : DEFAULT_MEMBER_TIERS;
+  const tierThresholds = buildTierThresholds(activeTiers);
+  const getNextTier = buildGetNextTier(activeTiers);
+  const getTierProgress = buildGetTierProgress(activeTiers);
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);

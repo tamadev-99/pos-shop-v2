@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { customers } from "@/db/schema";
+import { customers, storeSettings } from "@/db/schema";
 import { eq, like, and, desc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
@@ -135,6 +135,40 @@ export async function redeemPoints(customerId: string, points: number) {
   revalidatePath("/pelanggan");
 }
 
+// Default tier thresholds (based on totalSpent in Rupiah) used when no settings configured
+const DEFAULT_TIER_THRESHOLDS: { name: string; minSpent: number }[] = [
+  { name: "Platinum", minSpent: 10000000 },
+  { name: "Gold", minSpent: 5000000 },
+  { name: "Silver", minSpent: 2000000 },
+  { name: "Bronze", minSpent: 0 },
+];
+
+async function getTierThresholds(): Promise<{ name: string; minSpent: number }[]> {
+  try {
+    const setting = await db
+      .select()
+      .from(storeSettings)
+      .where(eq(storeSettings.key, "memberTiers"))
+      .limit(1);
+
+    const raw = setting[0]?.value;
+    const tiers = typeof raw === "string" ? JSON.parse(raw) : Array.isArray(raw) ? raw : null;
+
+    if (tiers && tiers.length > 0) {
+      // Map minPoints to minSpent threshold — sorted descending so highest tier is checked first
+      return tiers
+        .map((t: { name: string; minPoints: number }) => ({
+          name: t.name,
+          minSpent: (t.minPoints ?? 0) * 1000, // 1 point = Rp1.000 spent
+        }))
+        .sort((a: { minSpent: number }, b: { minSpent: number }) => b.minSpent - a.minSpent);
+    }
+  } catch {
+    // fallback to defaults
+  }
+  return DEFAULT_TIER_THRESHOLDS;
+}
+
 export async function recalculateTier(customerId: string) {
   const customer = await db
     .select()
@@ -145,11 +179,16 @@ export async function recalculateTier(customerId: string) {
   if (!customer[0]) return;
 
   const spent = customer[0].totalSpent;
-  let tier: "Bronze" | "Silver" | "Gold" | "Platinum" = "Bronze";
+  const thresholds = await getTierThresholds();
 
-  if (spent >= 10000000) tier = "Platinum";
-  else if (spent >= 5000000) tier = "Gold";
-  else if (spent >= 2000000) tier = "Silver";
+  // Find the highest tier the customer qualifies for
+  let tier: "Bronze" | "Silver" | "Gold" | "Platinum" = "Bronze";
+  for (const t of thresholds) {
+    if (spent >= t.minSpent) {
+      tier = t.name as typeof tier;
+      break;
+    }
+  }
 
   if (tier !== customer[0].tier) {
     const user = await getCurrentUser();

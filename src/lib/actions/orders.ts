@@ -29,6 +29,8 @@ export interface CreateOrderParams {
   shippingFee: number;
   total: number;
   paymentMethod: "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewallet";
+  bankName?: string;
+  referenceNumber?: string;
   cashPaid?: number;
   changeAmount?: number;
   notes?: string;
@@ -81,6 +83,8 @@ export async function createOrder(data: CreateOrderParams) {
     shippingFee: data.shippingFee || 0,
     total: data.total,
     paymentMethod: data.paymentMethod,
+    bankName: data.bankName || null,
+    referenceNumber: data.referenceNumber || null,
     cashPaid: data.cashPaid || null,
     changeAmount: data.changeAmount || null,
     cashierId: data.cashierId || null,
@@ -147,7 +151,7 @@ export async function createOrder(data: CreateOrderParams) {
       .where(eq(customers.id, data.customerId));
 
     // Auto-upgrade tier based on new totalSpent
-    recalculateTier(data.customerId).catch(() => {});
+    recalculateTier(data.customerId).catch(() => { });
   }
 
   // Create financial transaction

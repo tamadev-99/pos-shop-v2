@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
-import { Save, Store, User, Receipt, Users, Percent, Trash2, Printer, Usb, Wifi, Bluetooth, Loader2, AlertTriangle, CheckCircle, Info } from "lucide-react";
+import { Save, Store, User, Receipt, Users, Percent, Trash2, Printer, Usb, Wifi, Bluetooth, Loader2, AlertTriangle, CheckCircle, Info, Crown, Plus, X } from "lucide-react";
 import { useState, useTransition } from "react";
 import { updateSetting, updateUserRole } from "@/lib/actions/settings";
 import { toast } from "sonner";
@@ -26,6 +26,7 @@ const settingsTabs = [
   { label: "Toko", value: "toko" },
   { label: "Akun", value: "akun" },
   { label: "Pajak", value: "pajak" },
+  { label: "Member", value: "member" },
   { label: "Struk", value: "struk" },
   { label: "Printer", value: "printer" },
   { label: "Pengguna", value: "pengguna" },
@@ -69,6 +70,25 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
   const [printerType, setPrinterType] = useState(initialSettings["printerType"] || "usb");
   const [printerTarget, setPrinterTarget] = useState(initialSettings["printerTarget"] || "POS-58 Thermal Printer");
 
+  // Member tier settings
+  const defaultMemberTiers = [
+    { name: "Bronze", minPoints: 0, discount: 0, benefit: "Member dasar" },
+    { name: "Silver", minPoints: 500, discount: 2, benefit: "Diskon 2% untuk semua produk" },
+    { name: "Gold", minPoints: 1000, discount: 5, benefit: "Diskon 5% untuk semua produk" },
+    { name: "Platinum", minPoints: 2000, discount: 10, benefit: "Diskon 10% untuk semua produk" },
+  ];
+  const parsedMemberTiers = (() => {
+    try {
+      const raw = initialSettings["memberTiers"];
+      if (typeof raw === "string") return JSON.parse(raw);
+      if (Array.isArray(raw)) return raw;
+      return defaultMemberTiers;
+    } catch {
+      return defaultMemberTiers;
+    }
+  })();
+  const [memberTiers, setMemberTiers] = useState<{ name: string; minPoints: number; discount: number; benefit: string }[]>(parsedMemberTiers);
+
   const handleSaveStore = (e: React.FormEvent) => {
     e.preventDefault();
     startTransition(async () => {
@@ -104,6 +124,49 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
         toast.error(error.message || "Gagal menyimpan template struk");
       }
     });
+  };
+
+  const handleSaveMemberTiers = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Validate: names must not be empty, minPoints must be ascending
+    for (let i = 0; i < memberTiers.length; i++) {
+      if (!memberTiers[i].name.trim()) {
+        toast.error(`Nama tier ke-${i + 1} tidak boleh kosong`);
+        return;
+      }
+      if (i > 0 && memberTiers[i].minPoints <= memberTiers[i - 1].minPoints) {
+        toast.error(`Minimum poin "${memberTiers[i].name}" harus lebih besar dari "${memberTiers[i - 1].name}"`);
+        return;
+      }
+    }
+    startTransition(async () => {
+      try {
+        await updateSetting("memberTiers", JSON.stringify(memberTiers));
+        toast.success("Pengaturan member tier berhasil disimpan!");
+      } catch (error: any) {
+        toast.error(error.message || "Gagal menyimpan pengaturan member tier");
+      }
+    });
+  };
+
+  const updateTier = (index: number, field: string, value: string | number) => {
+    setMemberTiers((prev) => prev.map((t, i) => (i === index ? { ...t, [field]: value } : t)));
+  };
+
+  const addTier = () => {
+    const lastTier = memberTiers[memberTiers.length - 1];
+    setMemberTiers((prev) => [
+      ...prev,
+      { name: "", minPoints: (lastTier?.minPoints || 0) + 1000, discount: 0, benefit: "" },
+    ]);
+  };
+
+  const removeTier = (index: number) => {
+    if (memberTiers.length <= 1) {
+      toast.error("Minimal harus ada 1 tier");
+      return;
+    }
+    setMemberTiers((prev) => prev.filter((_, i) => i !== index));
   };
 
   const [printerStatus, setPrinterStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
@@ -344,6 +407,116 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
                   <Save size={14} />
                   Simpan Perubahan
                 </Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Member */}
+        {activeTab === "member" && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-500/20 flex items-center justify-center shadow-[0_0_12px_-3px_rgba(245,158,11,0.25)]">
+                  <Crown size={15} className="text-amber-400" />
+                </div>
+                <div>
+                  <CardTitle>Pengaturan Member Tier</CardTitle>
+                  <CardDescription>
+                    Atur tingkatan member, minimum poin, dan benefit diskon
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSaveMemberTiers} className="space-y-4">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">Nama Tier</th>
+                        <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">Minimum Poin</th>
+                        <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">Diskon (%)</th>
+                        <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider hidden sm:table-cell">Benefit</th>
+                        <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {memberTiers.map((tier, index) => (
+                        <tr key={index} className="border-b border-border last:border-0">
+                          <td className="py-2.5 pr-2">
+                            <Input
+                              value={tier.name}
+                              onChange={(e) => updateTier(index, "name", e.target.value)}
+                              placeholder="Nama tier"
+                              className="min-w-[100px]"
+                            />
+                          </td>
+                          <td className="py-2.5 pr-2">
+                            <Input
+                              type="number"
+                              value={tier.minPoints}
+                              onChange={(e) => updateTier(index, "minPoints", Number(e.target.value))}
+                              placeholder="0"
+                              min={0}
+                              className="min-w-[100px]"
+                            />
+                          </td>
+                          <td className="py-2.5 pr-2">
+                            <Input
+                              type="number"
+                              value={tier.discount}
+                              onChange={(e) => updateTier(index, "discount", Number(e.target.value))}
+                              placeholder="0"
+                              min={0}
+                              max={100}
+                              className="min-w-[80px]"
+                            />
+                          </td>
+                          <td className="py-2.5 pr-2 hidden sm:table-cell">
+                            <Input
+                              value={tier.benefit}
+                              onChange={(e) => updateTier(index, "benefit", e.target.value)}
+                              placeholder="Deskripsi benefit"
+                              className="min-w-[180px]"
+                            />
+                          </td>
+                          <td className="py-2.5">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeTier(index)}
+                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5"
+                            >
+                              <X size={14} />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                  <Button type="button" variant="outline" onClick={addTier}>
+                    <Plus size={14} />
+                    Tambah Tier
+                  </Button>
+                  <Button type="submit" disabled={isPending}>
+                    <Save size={14} />
+                    Simpan Perubahan
+                  </Button>
+                </div>
+
+                <div className="rounded-xl bg-surface border border-border p-3 space-y-1.5">
+                  <div className="flex items-start gap-2">
+                    <Info size={14} className="text-accent mt-0.5 shrink-0" />
+                    <div className="text-[11px] text-muted-foreground leading-relaxed">
+                      <p>Tier ditentukan berdasarkan total poin pelanggan. Pastikan minimum poin berurutan dari kecil ke besar. Diskon tier akan otomatis diterapkan pada transaksi di POS.</p>
+                    </div>
+                  </div>
+                </div>
               </form>
             </CardContent>
           </Card>

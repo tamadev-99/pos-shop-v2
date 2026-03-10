@@ -40,6 +40,9 @@ interface ReceiptDialogProps {
     receiptWidth?: "58" | "80";
     cashPaid?: number;
     changeAmount?: number;
+    bankName?: string;
+    referenceNumber?: string;
+    notes?: string;
     taxName?: string;
 }
 
@@ -76,6 +79,9 @@ export function ReceiptDialog({
     receiptWidth = "58",
     cashPaid,
     changeAmount,
+    bankName,
+    referenceNumber,
+    notes,
     taxName = "PPN",
 }: ReceiptDialogProps) {
     const receiptRef = useRef<HTMLDivElement>(null);
@@ -282,6 +288,21 @@ export function ReceiptDialog({
                         <span className="text-foreground">{PAYMENT_LABELS[paymentMethod] || paymentMethod}</span>
                     </div>
 
+                    {bankName && (
+                        <div className="flex justify-between text-[10px]">
+                            <span className="text-muted-foreground">
+                                {paymentMethod === "ewallet" ? "E-Wallet" : "Bank"}
+                            </span>
+                            <span className="text-foreground">{bankName}</span>
+                        </div>
+                    )}
+                    {referenceNumber && (
+                        <div className="flex justify-between text-[10px]">
+                            <span className="text-muted-foreground">Ref</span>
+                            <span className="text-foreground font-num">****{referenceNumber}</span>
+                        </div>
+                    )}
+
                     {cashPaid !== undefined && changeAmount !== undefined && (
                         <>
                             <div className="flex justify-between text-[10px]">
@@ -293,6 +314,12 @@ export function ReceiptDialog({
                                 <span className="text-foreground">{formatRupiah(changeAmount)}</span>
                             </div>
                         </>
+                    )}
+
+                    {notes && (
+                        <div className="text-[10px] text-muted-foreground italic mt-1">
+                            {notes}
+                        </div>
                     )}
 
                     {/* Footer */}
