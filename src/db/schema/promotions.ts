@@ -12,6 +12,7 @@ export const promotions = pgTable("promotions", {
   minPurchase: integer("min_purchase").default(0),
   buyQty: integer("buy_qty"),
   getQty: integer("get_qty"),
+  freeProductId: text("free_product_id"),
   startDate: text("start_date").notNull(),
   endDate: text("end_date").notNull(),
   isActive: boolean("is_active").notNull().default(true),

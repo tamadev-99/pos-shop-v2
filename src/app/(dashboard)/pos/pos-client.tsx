@@ -343,12 +343,30 @@ export default function POSClient({ initialProducts, customers, promotions, prin
       case "fixed":
         return Math.min(promo.value, eligibleSubtotal);
       case "buy_x_get_y": {
-        if (!promo.buyQty || !promo.getQty) return 0;
-        const totalQty = eligibleItems.reduce((s, i) => s + i.qty, 0);
-        if (totalQty === 0) return 0;
-        const sets = Math.floor(totalQty / (promo.buyQty + promo.getQty));
-        const avgPrice = eligibleSubtotal / totalQty;
-        return Math.round(sets * promo.getQty * avgPrice);
+        if (!promo.buyQty) return 0;
+
+        // Logic: Beli X item (produk apapun), gratis 1 produk tertentu (freeProductId)
+        // Produk gratis harus ada di keranjang
+        if (!promo.freeProductId) return 0;
+
+        // Find the free product in cart
+        const freeItemInCart = cart.find((item) => item.productId === promo.freeProductId);
+        if (!freeItemInCart) return 0;
+
+        // Count eligible items (excluding the free product itself)
+        const purchasedQty = eligibleItems
+          .filter((item) => item.productId !== promo.freeProductId)
+          .reduce((s, i) => s + i.qty, 0);
+
+        if (purchasedQty < promo.buyQty) return 0;
+
+        // How many free items can be granted: 1 free per X purchased items
+        const freeCount = Math.min(
+          Math.floor(purchasedQty / promo.buyQty),
+          freeItemInCart.qty // can't grant more than what's in cart
+        );
+
+        return Math.round(freeCount * freeItemInCart.price);
       }
       case "bundle":
         return Math.min(promo.value, eligibleSubtotal);

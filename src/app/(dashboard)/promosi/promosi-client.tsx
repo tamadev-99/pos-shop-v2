@@ -51,6 +51,7 @@ interface PromotionRow {
   minPurchase: number | null;
   buyQty: number | null;
   getQty: number | null;
+  freeProductId: string | null;
   startDate: string;
   endDate: string;
   isActive: boolean;
@@ -63,10 +64,17 @@ interface EditFormState {
   id: string;
   name: string;
   description: string;
+  type: PromoTypeDB;
   isActive: boolean;
   value: number;
+  minPurchase: number;
+  buyQty: number | null;
+  getQty: number | null;
+  freeProductId: string | null;
   startDate: string;
   endDate: string;
+  appliesTo: "all" | "category" | "product";
+  targetIds: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -157,14 +165,18 @@ function formatDateRange(start: string, end: string) {
   return `${fmt(start)} - ${fmt(end)} ${endDate.getFullYear()}`;
 }
 
-function getPromoValueLabel(promo: PromotionRow) {
+function getPromoValueLabel(promo: PromotionRow, productsList?: OptionItem[]) {
   switch (promo.type) {
     case "percentage":
       return `${promo.value}%`;
     case "fixed":
       return formatRupiah(promo.value);
-    case "buy_x_get_y":
-      return `Beli ${promo.buyQty ?? 0} Gratis ${promo.getQty ?? 0}`;
+    case "buy_x_get_y": {
+      const freeName = promo.freeProductId
+        ? productsList?.find((p) => p.id === promo.freeProductId)?.name
+        : null;
+      return `Beli ${promo.buyQty ?? 0} Gratis 1${freeName ? ` ${freeName}` : ""}`;
+    }
     case "bundle":
       return formatRupiah(promo.value);
   }
@@ -174,11 +186,24 @@ function getPromoValueLabel(promo: PromotionRow) {
 // Component
 // ---------------------------------------------------------------------------
 
-interface Props {
-  initialPromotions: PromotionRow[];
+interface OptionItem {
+  id: string;
+  name: string;
 }
 
-export default function PromosiClient({ initialPromotions }: Props) {
+interface Props {
+  initialPromotions: PromotionRow[];
+  categories?: OptionItem[];
+  products?: OptionItem[];
+}
+
+const appliesToOptions = [
+  { label: "Semua Produk", value: "all" },
+  { label: "Kategori Tertentu", value: "category" },
+  { label: "Produk Tertentu", value: "product" },
+];
+
+export default function PromosiClient({ initialPromotions, categories = [], products = [] }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -196,6 +221,9 @@ export default function PromosiClient({ initialPromotions }: Props) {
   const [formEndDate, setFormEndDate] = useState("");
   const [formIsActive, setFormIsActive] = useState("ya");
   const [formDescription, setFormDescription] = useState("");
+  const [formAppliesTo, setFormAppliesTo] = useState<"all" | "category" | "product">("all");
+  const [formTargetIds, setFormTargetIds] = useState<string[]>([]);
+  const [formFreeProductId, setFormFreeProductId] = useState("");
 
   // Edit state
   const [editOpen, setEditOpen] = useState(false);
@@ -240,6 +268,9 @@ export default function PromosiClient({ initialPromotions }: Props) {
     setFormIsActive("ya");
     setFormDescription("");
     setFormType("percentage");
+    setFormAppliesTo("all");
+    setFormTargetIds([]);
+    setFormFreeProductId("");
   }
 
   function handleCreate(e: React.FormEvent) {
@@ -254,8 +285,11 @@ export default function PromosiClient({ initialPromotions }: Props) {
           minPurchase: formMinPurchase ? parseInt(formMinPurchase) : undefined,
           buyQty: formType === "buy_x_get_y" ? parseInt(formBuyQty) || undefined : undefined,
           getQty: formType === "buy_x_get_y" ? parseInt(formGetQty) || undefined : undefined,
+          freeProductId: formType === "buy_x_get_y" && formFreeProductId ? formFreeProductId : undefined,
           startDate: formStartDate,
           endDate: formEndDate,
+          appliesTo: formAppliesTo,
+          targetIds: formAppliesTo !== "all" ? formTargetIds : undefined,
         });
         toast.success("Promosi berhasil dibuat");
         resetCreateForm();
@@ -272,10 +306,17 @@ export default function PromosiClient({ initialPromotions }: Props) {
       id: promo.id,
       name: promo.name,
       description: promo.description || "",
+      type: promo.type,
       isActive: promo.isActive,
       value: promo.value,
+      minPurchase: promo.minPurchase ?? 0,
+      buyQty: promo.buyQty,
+      getQty: promo.getQty,
+      freeProductId: promo.freeProductId,
       startDate: promo.startDate,
       endDate: promo.endDate,
+      appliesTo: promo.appliesTo,
+      targetIds: promo.targetIds ?? [],
     });
     setEditOpen(true);
   }
@@ -290,8 +331,14 @@ export default function PromosiClient({ initialPromotions }: Props) {
           description: editForm.description,
           isActive: editForm.isActive,
           value: editForm.value,
+          minPurchase: editForm.minPurchase,
+          buyQty: editForm.buyQty,
+          getQty: editForm.getQty,
+          freeProductId: editForm.type === "buy_x_get_y" ? editForm.freeProductId : null,
           startDate: editForm.startDate,
           endDate: editForm.endDate,
+          appliesTo: editForm.appliesTo,
+          targetIds: editForm.appliesTo !== "all" ? editForm.targetIds : [],
         });
         toast.success("Promosi berhasil diperbarui");
         setEditOpen(false);
@@ -394,11 +441,11 @@ export default function PromosiClient({ initialPromotions }: Props) {
                         : "Nilai Diskon"}
                   </p>
                   <p className="text-lg font-bold font-num text-foreground mt-0.5">
-                    {getPromoValueLabel(promo)}
+                    {getPromoValueLabel(promo, products)}
                   </p>
                   {promo.type === "buy_x_get_y" && (
                     <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                      Beli {(promo.buyQty ?? 0) + (promo.getQty ?? 0)} item, bayar {promo.buyQty ?? 0} saja
+                      Beli {promo.buyQty ?? 0} item, gratis 1 produk tertentu
                     </p>
                   )}
                   {promo.type === "bundle" && (
@@ -418,8 +465,10 @@ export default function PromosiClient({ initialPromotions }: Props) {
                     <ShoppingBag size={13} className="shrink-0 opacity-50" />
                     <span className="truncate">
                       {promo.appliesTo === "all"
-                        ? "Semua Kategori"
-                        : (promo.targetIds ?? []).join(", ") || "Semua Kategori"}
+                        ? "Semua Produk"
+                        : promo.appliesTo === "category"
+                          ? (promo.targetIds ?? []).map((id) => categories.find((c) => c.id === id)?.name || id).join(", ") || "Semua Kategori"
+                          : (promo.targetIds ?? []).map((id) => products.find((p) => p.id === id)?.name || id).join(", ") || "Semua Produk"}
                     </span>
                   </div>
                   {promo.minPurchase != null && promo.minPurchase > 0 && (
@@ -532,51 +581,53 @@ export default function PromosiClient({ initialPromotions }: Props) {
                 <Info size={14} className="text-amber-400 shrink-0 mt-0.5" />
                 <div className="text-[11px] text-amber-200/80 space-y-1">
                   <p className="font-medium text-amber-300">Cara kerja Beli X Gratis Y:</p>
-                  <p>Pelanggan membeli sejumlah produk tertentu dan mendapatkan produk gratis. Contoh: <strong>Beli 2 Gratis 1</strong> — pelanggan membeli 3 item, hanya bayar 2.</p>
-                  <p>Produk gratis akan otomatis dipilih dari item termurah di keranjang.</p>
+                  <p>Pelanggan membeli <strong>X item (produk apapun)</strong>, lalu mendapatkan <strong>1 produk tertentu gratis</strong>.</p>
+                  <p>Contoh: <strong>Beli 2 item</strong> produk apapun, <strong>gratis 1 Aksesoris</strong>. Produk gratis harus ditambahkan ke keranjang oleh kasir.</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Jumlah Beli (X)
-                  </label>
-                  <Input
-                    type="number"
-                    min="1"
-                    placeholder="2"
-                    value={formBuyQty}
-                    onChange={(e) => setFormBuyQty(e.target.value)}
-                    required
-                  />
-                  <p className="text-[10px] text-muted-foreground/60">Jumlah item yang harus dibeli</p>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Jumlah Gratis (Y)
-                  </label>
-                  <Input
-                    type="number"
-                    min="1"
-                    placeholder="1"
-                    value={formGetQty}
-                    onChange={(e) => setFormGetQty(e.target.value)}
-                    required
-                  />
-                  <p className="text-[10px] text-muted-foreground/60">Jumlah item yang digratiskan</p>
-                </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Jumlah Item yang Harus Dibeli (X)
+                </label>
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="2"
+                  value={formBuyQty}
+                  onChange={(e) => setFormBuyQty(e.target.value)}
+                  required
+                />
+                <p className="text-[10px] text-muted-foreground/60">Pelanggan harus membeli minimal X item untuk mendapat gratis</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Produk yang Digratiskan
+                </label>
+                <Select
+                  options={[
+                    { label: "— Pilih produk gratis —", value: "" },
+                    ...products.map((p) => ({ label: p.name, value: p.id })),
+                  ]}
+                  value={formFreeProductId}
+                  onChange={(e) => setFormFreeProductId(e.target.value)}
+                  required
+                />
+                <p className="text-[10px] text-muted-foreground/60">
+                  Produk ini akan digratiskan 1 unit saat pelanggan memenuhi syarat beli
+                </p>
               </div>
 
               {/* Preview */}
-              {formBuyQty && formGetQty && (
+              {formBuyQty && formFreeProductId && (
                 <div className="p-2.5 rounded-lg bg-card border border-border text-center">
                   <p className="text-xs text-muted-foreground">Preview promosi:</p>
                   <p className="text-sm font-semibold text-amber-400 mt-0.5">
-                    Beli {formBuyQty} Gratis {formGetQty}
+                    Beli {formBuyQty} Item, Gratis 1 {products.find((p) => p.id === formFreeProductId)?.name || ""}
                   </p>
                   <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                    Pelanggan beli {parseInt(formBuyQty) + parseInt(formGetQty)} item, bayar {formBuyQty} item saja
+                    Kasir tambahkan produk gratis ke keranjang, harga otomatis Rp 0
                   </p>
                 </div>
               )}
@@ -659,6 +710,67 @@ export default function PromosiClient({ initialPromotions }: Props) {
               <p className="text-[10px] text-muted-foreground/60">
                 Minimum total belanja agar promosi berlaku (kosongkan jika tidak ada minimum)
               </p>
+            </div>
+          )}
+
+          {/* Berlaku Untuk */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Berlaku Untuk
+            </label>
+            <Select
+              options={appliesToOptions}
+              value={formAppliesTo}
+              onChange={(e) => {
+                setFormAppliesTo(e.target.value as "all" | "category" | "product");
+                setFormTargetIds([]);
+              }}
+            />
+          </div>
+
+          {/* Target selection */}
+          {formAppliesTo !== "all" && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                Pilih {formAppliesTo === "category" ? "Kategori" : "Produk"}
+              </label>
+              <div className="max-h-[140px] overflow-y-auto rounded-xl border border-border bg-card p-2 space-y-1">
+                {(formAppliesTo === "category" ? categories : products).map((item) => (
+                  <label
+                    key={item.id}
+                    className={cn(
+                      "flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all text-xs",
+                      formTargetIds.includes(item.id)
+                        ? "bg-accent/10 text-accent"
+                        : "text-muted-foreground hover:bg-white/[0.04]"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formTargetIds.includes(item.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormTargetIds((prev) => [...prev, item.id]);
+                        } else {
+                          setFormTargetIds((prev) => prev.filter((id) => id !== item.id));
+                        }
+                      }}
+                      className="accent-emerald-500 w-3.5 h-3.5"
+                    />
+                    <span className="truncate">{item.name}</span>
+                  </label>
+                ))}
+                {(formAppliesTo === "category" ? categories : products).length === 0 && (
+                  <p className="text-[10px] text-muted-dim text-center py-2">
+                    Tidak ada {formAppliesTo === "category" ? "kategori" : "produk"} tersedia
+                  </p>
+                )}
+              </div>
+              {formTargetIds.length > 0 && (
+                <p className="text-[10px] text-muted-foreground/60">
+                  {formTargetIds.length} {formAppliesTo === "category" ? "kategori" : "produk"} dipilih
+                </p>
+              )}
             </div>
           )}
 
@@ -768,7 +880,9 @@ export default function PromosiClient({ initialPromotions }: Props) {
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">
-                Nilai
+                {editForm.type === "percentage" ? "Nilai Diskon (%)" :
+                 editForm.type === "bundle" ? "Harga Bundle (Rp)" :
+                 editForm.type === "fixed" ? "Nilai Diskon (Rp)" : "Nilai"}
               </label>
               <Input
                 type="number"
@@ -779,6 +893,115 @@ export default function PromosiClient({ initialPromotions }: Props) {
                 required
               />
             </div>
+
+            {/* Buy X Get Y fields */}
+            {editForm.type === "buy_x_get_y" && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Jumlah Item yang Harus Dibeli (X)
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={editForm.buyQty ?? ""}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, buyQty: parseInt(e.target.value) || null })
+                    }
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Produk yang Digratiskan
+                  </label>
+                  <Select
+                    options={[
+                      { label: "— Pilih produk gratis —", value: "" },
+                      ...products.map((p) => ({ label: p.name, value: p.id })),
+                    ]}
+                    value={editForm.freeProductId || ""}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, freeProductId: e.target.value || null })
+                    }
+                    required
+                  />
+                  <p className="text-[10px] text-muted-foreground/60">
+                    1 unit produk ini akan digratiskan
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Min purchase for non buy_x_get_y */}
+            {editForm.type !== "buy_x_get_y" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Min. Pembelian (Rp)
+                </label>
+                <Input
+                  type="number"
+                  value={editForm.minPurchase || ""}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, minPurchase: parseInt(e.target.value) || 0 })
+                  }
+                />
+              </div>
+            )}
+
+            {/* Berlaku Untuk */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                Berlaku Untuk
+              </label>
+              <Select
+                options={appliesToOptions}
+                value={editForm.appliesTo}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, appliesTo: e.target.value as "all" | "category" | "product", targetIds: [] })
+                }
+              />
+            </div>
+
+            {/* Target selection */}
+            {editForm.appliesTo !== "all" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Pilih {editForm.appliesTo === "category" ? "Kategori" : "Produk"}
+                </label>
+                <div className="max-h-[140px] overflow-y-auto rounded-xl border border-border bg-card p-2 space-y-1">
+                  {(editForm.appliesTo === "category" ? categories : products).map((item) => (
+                    <label
+                      key={item.id}
+                      className={cn(
+                        "flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all text-xs",
+                        editForm.targetIds.includes(item.id)
+                          ? "bg-accent/10 text-accent"
+                          : "text-muted-foreground hover:bg-white/[0.04]"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={editForm.targetIds.includes(item.id)}
+                        onChange={(e) => {
+                          const newIds = e.target.checked
+                            ? [...editForm.targetIds, item.id]
+                            : editForm.targetIds.filter((id) => id !== item.id);
+                          setEditForm({ ...editForm, targetIds: newIds });
+                        }}
+                        className="accent-emerald-500 w-3.5 h-3.5"
+                      />
+                      <span className="truncate">{item.name}</span>
+                    </label>
+                  ))}
+                </div>
+                {editForm.targetIds.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground/60">
+                    {editForm.targetIds.length} {editForm.appliesTo === "category" ? "kategori" : "produk"} dipilih
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

@@ -30,7 +30,7 @@ function Dialog({ open, onClose, children, className }: DialogProps) {
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
       onClick={(e) => {
         if (e.target === overlayRef.current) onClose();
       }}
@@ -40,7 +40,8 @@ function Dialog({ open, onClose, children, className }: DialogProps) {
       {/* Panel */}
       <div
         className={cn(
-          "relative z-10 w-full max-w-lg p-6",
+          "relative z-10 w-full max-w-lg p-5 sm:p-6",
+          "max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
           "bg-card-solid",
           "rounded-2xl border border-border",
           "shadow-[var(--shadow-lg)]",

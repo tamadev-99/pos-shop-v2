@@ -42,6 +42,7 @@ export async function createPromotion(data: {
   minPurchase?: number;
   buyQty?: number;
   getQty?: number;
+  freeProductId?: string;
   startDate: string;
   endDate: string;
   appliesTo?: "all" | "category" | "product";
@@ -59,6 +60,7 @@ export async function createPromotion(data: {
     minPurchase: data.minPurchase || 0,
     buyQty: data.buyQty || null,
     getQty: data.getQty || null,
+    freeProductId: data.freeProductId || null,
     startDate: data.startDate,
     endDate: data.endDate,
     appliesTo: data.appliesTo || "all",
@@ -87,8 +89,14 @@ export async function updatePromotion(
     description: string;
     isActive: boolean;
     value: number;
+    minPurchase: number;
+    buyQty: number | null;
+    getQty: number | null;
+    freeProductId: string | null;
     startDate: string;
     endDate: string;
+    appliesTo: "all" | "category" | "product";
+    targetIds: string[];
   }>
 ) {
   const user = await requireRole("manager", "owner");

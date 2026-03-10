@@ -43,6 +43,7 @@ export interface Promotion {
   minPurchase: number;
   buyQty: number | null;
   getQty: number | null;
+  freeProductId: string | null;
   appliesTo: "all" | "category" | "product";
   targetIds: string[] | null;
 }

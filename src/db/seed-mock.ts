@@ -550,6 +550,18 @@ async function seedMock() {
     const cashPaid = od.payment === "tunai" ? Math.ceil(total / 10000) * 10000 : total;
     const changeAmount = od.payment === "tunai" ? cashPaid - total : 0;
 
+    // Generate bankName/referenceNumber for card & ewallet payments
+    const bankNames = ["BCA", "MANDIRI", "BRI", "BNI", "CIMB"];
+    const ewalletNames = ["GoPay", "OVO", "DANA", "ShopeePay"];
+    let bankName: string | null = null;
+    let referenceNumber: string | null = null;
+    if (od.payment === "debit" || od.payment === "kredit") {
+      bankName = bankNames[od.seq % bankNames.length];
+      referenceNumber = String(1000 + od.seq * 111 + od.day * 7).slice(-4);
+    } else if (od.payment === "ewallet") {
+      bankName = ewalletNames[od.seq % ewalletNames.length];
+    }
+
     await db.insert(schema.orders).values({
       id: oid,
       customerId: custId,
@@ -563,6 +575,8 @@ async function seedMock() {
       changeAmount,
       status: "selesai",
       paymentMethod: od.payment,
+      bankName,
+      referenceNumber,
       cashierId,
       shiftId: shiftMap[od.day],
       notes: null,
@@ -827,16 +841,16 @@ async function seedMock() {
   console.log("\n🎉 Step 9: Promotions...");
 
   const promos = [
-    // Active promo
+    // Active promo — all products
     { id: "promo-001", name: "Diskon Weekend 10%", description: "Diskon 10% untuk semua produk di akhir pekan", type: "percentage" as const, value: 10, minPurchase: 100000, startDate: dateStr(7), endDate: dateStr(-7), isActive: true, appliesTo: "all" as const, targetIds: [] },
-    // Active category promo
+    // Active category promo — hijab only
     { id: "promo-002", name: "Promo Hijab Spesial", description: "Potongan Rp 15.000 untuk pembelian hijab", type: "fixed" as const, value: 15000, minPurchase: 50000, startDate: dateStr(14), endDate: dateStr(-14), isActive: true, appliesTo: "category" as const, targetIds: ["cat-hijab"] },
-    // Buy X Get Y
-    { id: "promo-003", name: "Beli 3 Gratis 1 Aksesoris", description: "Beli 3 aksesoris, gratis 1 item termurah", type: "buy_x_get_y" as const, value: 0, minPurchase: 0, buyQty: 3, getQty: 1, startDate: dateStr(10), endDate: dateStr(-5), isActive: true, appliesTo: "category" as const, targetIds: ["cat-aksesoris"] },
+    // Buy X Get Y — buy 2 any items, get 1 Gelang Mutiara free
+    { id: "promo-003", name: "Beli 2 Gratis 1 Gelang Mutiara", description: "Beli 2 item apapun, gratis 1 Gelang Mutiara", type: "buy_x_get_y" as const, value: 0, minPurchase: 0, buyQty: 2, getQty: 1, freeProductId: "P008", startDate: dateStr(10), endDate: dateStr(-5), isActive: true, appliesTo: "all" as const, targetIds: [] },
     // Expired promo
     { id: "promo-004", name: "Flash Sale Imlek", description: "Diskon 20% untuk merayakan Tahun Baru Imlek", type: "percentage" as const, value: 20, minPurchase: 200000, startDate: dateStr(45), endDate: dateStr(30), isActive: false, appliesTo: "all" as const, targetIds: [] },
-    // Upcoming promo
-    { id: "promo-005", name: "Promo Ramadhan", description: "Diskon 15% menyambut Ramadhan", type: "percentage" as const, value: 15, minPurchase: 150000, startDate: dateStr(-5), endDate: dateStr(-35), isActive: true, appliesTo: "all" as const, targetIds: [] },
+    // Upcoming promo — specific products
+    { id: "promo-005", name: "Promo Ramadhan", description: "Diskon 15% menyambut Ramadhan", type: "percentage" as const, value: 15, minPurchase: 150000, startDate: dateStr(-5), endDate: dateStr(-35), isActive: true, appliesTo: "product" as const, targetIds: ["P003", "P004", "P009"] },
   ];
 
   for (const p of promos) {
@@ -847,6 +861,7 @@ async function seedMock() {
       targetIds: p.targetIds as unknown as string[],
       buyQty: (p as { buyQty?: number }).buyQty,
       getQty: (p as { getQty?: number }).getQty,
+      freeProductId: (p as { freeProductId?: string }).freeProductId,
     }).onConflictDoNothing();
   }
   console.log(`  ✅ ${promos.length} promotions`);
