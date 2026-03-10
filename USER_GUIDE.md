@@ -126,11 +126,11 @@ Klik **Bayar** dan pilih metode pembayaran:
 | Metode | Keterangan |
 |--------|-----------|
 | **Tunai** | Masukkan jumlah uang, kembalian dihitung otomatis. Tersedia tombol cepat Rp 50rb, 100rb, 200rb, 500rb |
-| **Debit** | Kartu debit |
-| **Kredit** | Kartu kredit |
-| **Transfer** | Transfer bank |
-| **QRIS** | Pembayaran QR Code |
-| **E-Wallet** | GoPay, OVO, DANA, ShopeePay |
+| **Debit Card** | Pilih **bank** (BCA, MANDIRI, BRI, BNI, CIMB, Lainnya), masukkan **4 digit no. referensi** (opsional). Bank wajib dipilih sebelum konfirmasi |
+| **Kredit Card** | Sama seperti Debit — pilih bank + no. referensi opsional |
+| **E-Wallet** | Pilih provider: GoPay, OVO, DANA, ShopeePay. Nama provider tersimpan di database |
+
+**Split Payment**: Klik tombol **Split Payment** untuk membagi pembayaran ke beberapa metode. Contoh: Rp 100rb Tunai + Rp 50rb Debit BCA. Detail split tercatat di catatan order.
 
 #### Langkah 8: Struk
 Setelah pembayaran berhasil, Anda bisa:
@@ -252,7 +252,9 @@ Jika perlu melayani pelanggan lain terlebih dahulu:
 #### Detail Pesanan
 - Daftar item: nama produk, jumlah, harga satuan, subtotal
 - Ringkasan: subtotal, diskon, pajak, ongkir, total
-- Info pembayaran: metode, uang bayar, kembalian (jika tunai)
+- Info pembayaran: metode, **bank/e-wallet** (jika ada), **no. referensi** (jika ada)
+- **Uang tunai & kembalian** ditampilkan untuk pembayaran tunai
+- **Catatan split payment** ditampilkan jika menggunakan split
 - Info kasir dan pelanggan
 
 #### Aksi Pesanan
@@ -361,24 +363,52 @@ Jika perlu melayani pelanggan lain terlebih dahulu:
 
 ### Jenis Promosi
 
-| Jenis | Contoh |
-|-------|--------|
-| **Diskon Persentase** | Diskon 10% untuk semua produk |
-| **Diskon Nominal** | Potongan Rp 50.000 |
-| **Beli X Gratis Y** | Beli 2 Gratis 1 |
-| **Bundle** | Paket hemat dengan harga spesial |
+| Jenis | Contoh | Keterangan |
+|-------|--------|------------|
+| **Diskon Persentase** | Diskon 10% | Potongan berdasarkan persentase dari harga |
+| **Diskon Nominal** | Potongan Rp 50.000 | Potongan harga tetap dalam Rupiah |
+| **Beli X Gratis Y** | Beli 2, Gratis 1 Gelang | Beli X item apapun, gratis 1 produk tertentu yang sudah ditentukan |
+| **Bundle** | Paket Rp 40.000 | Beberapa produk dijual bersama dengan harga spesial |
 
 ### Buat Promosi
 1. Klik **+ Tambah Promosi**
-2. Isi informasi:
-   - **Nama promosi**
-   - **Deskripsi**
+2. Isi informasi umum:
+   - **Nama promosi** (wajib)
+   - **Deskripsi** (opsional)
    - **Jenis** — pilih dari 4 jenis di atas
-   - **Nilai** — persentase atau nominal
-   - **Minimum belanja** (opsional)
-   - **Tanggal mulai** dan **tanggal berakhir**
-   - **Berlaku untuk**: Semua produk, kategori tertentu, atau produk tertentu
-3. Klik **Simpan**
+   - **Tanggal mulai** dan **tanggal berakhir** (wajib)
+   - **Aktif** — Ya atau Tidak
+
+3. Isi informasi sesuai jenis:
+
+   **Diskon Persentase:**
+   - **Nilai diskon (%)** — contoh: 10 untuk diskon 10%
+   - **Min. pembelian** (opsional) — minimum total belanja
+
+   **Diskon Nominal:**
+   - **Nilai diskon (Rp)** — contoh: 50000 untuk potongan Rp 50.000
+   - **Min. pembelian** (opsional)
+
+   **Beli X Gratis Y:**
+   - **Jumlah item yang harus dibeli (X)** — contoh: 2
+   - **Produk yang digratiskan** — pilih produk spesifik dari dropdown (wajib)
+   - Kasir harus **menambahkan produk gratis ke keranjang**, harga otomatis menjadi Rp 0
+
+   **Bundle:**
+   - **Harga bundle (Rp)** — harga total paket
+   - **Min. pembelian** (opsional)
+
+4. Pilih **Berlaku Untuk**:
+   - **Semua Produk** — promo berlaku untuk semua item
+   - **Kategori Tertentu** — centang kategori yang berlaku (contoh: Hijab, Aksesoris)
+   - **Produk Tertentu** — centang produk spesifik yang berlaku
+
+5. Klik **Simpan**
+
+### Edit Promosi
+- Klik ikon **pensil** pada kartu promosi
+- Semua field bisa diubah: nama, nilai, tanggal, berlaku untuk, target, produk gratis, dll
+- Klik **Simpan Perubahan**
 
 ### Filter Promosi
 - **Semua** — tampilkan semua promosi
@@ -387,10 +417,20 @@ Jika perlu melayani pelanggan lain terlebih dahulu:
 - **Berakhir** — sudah lewat
 
 ### Cara Kerja di Kasir
+
+**Otomatis:**
 - Promosi yang memenuhi syarat **otomatis diterapkan** ke keranjang
 - Sistem memilih promosi dengan **diskon terbesar**
 - Diskon tier dan diskon promosi **tidak ditumpuk** — yang lebih besar yang berlaku
 - Poin loyalitas bisa digunakan **bersamaan** dengan diskon
+- Kasir bisa memilih **"Tidak ada promo"** untuk menonaktifkan promosi manual
+
+**Beli X Gratis Y di Kasir:**
+1. Kasir menambahkan minimal X item ke keranjang (produk apapun)
+2. Kasir menambahkan **produk gratis** ke keranjang
+3. Diskon otomatis terhitung — harga produk gratis menjadi Rp 0
+4. Jika pelanggan beli 4 item dengan promo "Beli 2 Gratis 1", maka 2 unit produk gratis bisa didapat (jika ada 2 di keranjang)
+5. Produk gratis **harus ada di keranjang** — jika tidak ditambahkan, diskon tidak muncul
 
 ---
 

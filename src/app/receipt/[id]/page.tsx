@@ -1,5 +1,8 @@
 import { getOrderById } from "@/lib/actions/orders";
 import { getSetting } from "@/lib/actions/settings";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { ReceiptClient } from "./receipt-client";
 
@@ -16,6 +19,13 @@ export default async function DynamicReceiptPage({
         return notFound();
     }
 
+    // Resolve cashier name from ID
+    let cashierName = "Admin";
+    if (order.cashierId) {
+        const cashier = await db.select({ name: users.name }).from(users).where(eq(users.id, order.cashierId)).then(r => r[0]);
+        if (cashier) cashierName = cashier.name;
+    }
+
     // Fetch store settings for the receipt header/footer
     const [storeName, receiptAddress, storePhone, receiptFooter, taxName] = await Promise.all([
         getSetting("storeName"),
@@ -30,7 +40,7 @@ export default async function DynamicReceiptPage({
             order={{
                 id: order.id,
                 createdAt: order.createdAt,
-                cashierId: order.cashierId ?? null,
+                cashierName: cashierName,
                 customerName: order.customerName ?? null,
                 items: order.items,
                 subtotal: order.subtotal,

@@ -14,7 +14,7 @@ interface OrderItem {
 interface Order {
     id: string;
     createdAt: Date;
-    cashierId: string | null;
+    cashierName: string | null;
     customerName: string | null;
     items: OrderItem[];
     subtotal: number;
@@ -103,7 +103,7 @@ export function ReceiptClient({ order, store }: ReceiptClientProps) {
                         </div>
                         <div>
                             <p className="text-muted-foreground text-[11px] uppercase tracking-wider mb-1">Kasir</p>
-                            <p className="font-medium text-foreground">{order.cashierId || "Admin"}</p>
+                            <p className="font-medium text-foreground">{order.cashierName || "Admin"}</p>
                         </div>
                         <div className="text-right">
                             <p className="text-muted-foreground text-[11px] uppercase tracking-wider mb-1">Pelanggan</p>
