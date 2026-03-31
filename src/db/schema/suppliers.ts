@@ -1,6 +1,7 @@
 import { pgTable, text, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { categories } from "./products";
+import { stores } from "./auth";
 
 export const supplierStatusEnum = pgEnum("supplier_status", ["aktif", "nonaktif"]);
 
@@ -15,6 +16,7 @@ export const suppliers = pgTable("suppliers", {
   totalSpent: integer("total_spent").notNull().default(0),
   status: supplierStatusEnum("status").notNull().default("aktif"),
   joinDate: text("join_date").notNull(),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

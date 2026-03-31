@@ -1,13 +1,17 @@
+import { enforceRouteAccess } from '@/lib/actions/permissions';
 import { getProducts, getCategories, getAllVariantsFlat } from "@/lib/actions/products";
 import { getSuppliers } from "@/lib/actions/suppliers";
 import ProdukClient from "./produk-client";
+import { getActiveStoreDetails } from "@/lib/actions/store-context";
 
 export default async function ProdukPage() {
-  const [productsResult, categories, suppliers, variants] = await Promise.all([
+  await enforceRouteAccess('/produk');
+  const [productsResult, categories, suppliers, variants, storeDetails] = await Promise.all([
     getProducts({ limit: 10, offset: 0 }),
     getCategories(),
     getSuppliers(),
     getAllVariantsFlat(),
+    getActiveStoreDetails(),
   ]);
 
   const categoriesWithCount = categories.map((cat) => ({
@@ -22,6 +26,7 @@ export default async function ProdukPage() {
       categories={categoriesWithCount}
       suppliers={suppliers}
       initialVariants={variants}
+      storeType={storeDetails.type || "clothing"}
     />
   );
 }

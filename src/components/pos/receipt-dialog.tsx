@@ -4,7 +4,7 @@ import { Dialog, DialogClose, DialogHeader, DialogTitle } from "@/components/ui/
 import { Button } from "@/components/ui/button";
 import { formatRupiah } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { Printer, X, CheckCircle2, MessageCircle, Send } from "lucide-react";
+import { Printer, X, CheckCircle2, MessageCircle, Send, Download } from "lucide-react";
 import { useRef, useState } from "react";
 import { buildReceiptCommands, printReceipt, printViaBrowser, type PrinterConfig, type ReceiptPrintData } from "@/lib/thermal-printer";
 import { toast } from "sonner";
@@ -33,7 +33,6 @@ interface ReceiptDialogProps {
     storeName?: string;
     storeAddress?: string;
     storePhone?: string;
-    receiptHeader?: string;
     receiptFooter?: string;
     printerType?: string;
     printerTarget?: string;
@@ -44,6 +43,8 @@ interface ReceiptDialogProps {
     referenceNumber?: string;
     notes?: string;
     taxName?: string;
+    receiptLogo?: string;
+    receiptLogoImage?: string;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -72,7 +73,6 @@ export function ReceiptDialog({
     storeName = "KasirPro",
     storeAddress,
     storePhone,
-    receiptHeader,
     receiptFooter,
     printerType = "browser",
     printerTarget = "",
@@ -83,6 +83,8 @@ export function ReceiptDialog({
     referenceNumber,
     notes,
     taxName = "PPN",
+    receiptLogo,
+    receiptLogoImage,
 }: ReceiptDialogProps) {
     const receiptRef = useRef<HTMLDivElement>(null);
     const [showPhoneInput, setShowPhoneInput] = useState(false);
@@ -107,10 +109,11 @@ export function ReceiptDialog({
             storeName,
             storeAddress: storeAddress || "",
             storePhone: storePhone || "",
-            receiptHeader: receiptHeader || storeName,
             receiptFooter: receiptFooter || "Terima kasih atas kunjungan Anda!",
             cashPaid,
             changeAmount,
+            receiptLogo,
+            receiptLogoImage,
         };
 
         if (printerType === "browser" || !printerType) {
@@ -119,7 +122,7 @@ export function ReceiptDialog({
         }
 
         try {
-            const commands = buildReceiptCommands(receiptData, receiptWidth);
+            const commands = await buildReceiptCommands(receiptData, receiptWidth);
             const config: PrinterConfig = {
                 type: printerType as "usb" | "bluetooth" | "network",
                 target: printerTarget,
@@ -197,6 +200,10 @@ export function ReceiptDialog({
                 <div className="bg-surface border border-border rounded-xl p-4 text-xs font-mono space-y-2">
                     {/* Header */}
                     <div className="text-center space-y-0.5">
+                        {receiptLogo === "yes" && receiptLogoImage && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={receiptLogoImage} alt="Logo Toko" className="max-w-[120px] max-h-[120px] mx-auto object-contain mb-2 filter grayscale" />
+                        )}
                         <p className="font-bold text-sm text-foreground">{storeName}</p>
                         {storeAddress && <p className="text-muted-foreground">{storeAddress}</p>}
                         {storePhone && <p className="text-muted-foreground">Telp: {storePhone}</p>}
@@ -359,22 +366,38 @@ export function ReceiptDialog({
             )}
 
             {/* Action buttons */}
-            <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                <Button variant="ghost" className="flex-1" onClick={onClose}>
-                    <X size={14} className="mr-2" />
-                    Tutup
+            <div className="flex flex-col gap-2 mt-4 px-4">
+                <Button 
+                    variant="outline" 
+                    className="w-full h-10 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all font-semibold text-xs" 
+                    onClick={() => window.open(`/receipt/${orderId}`, "_blank")}
+                >
+                    <Download size={14} className="mr-2" />
+                    Lihat Struk Digital
                 </Button>
-                <div className="flex gap-2 flex-1">
-                    <Button variant="outline" className="flex-1 border-[#25D366] text-[#25D366] hover:bg-[#25D366]/10 hover:text-[#25D366]" onClick={handleWhatsApp}>
-                        <MessageCircle size={14} className="mr-2" />
-                        WhatsApp
+                
+                <div className="flex items-center gap-2">
+                    <Button variant="ghost" className="flex-1 h-10 text-slate-500 hover:text-slate-700" onClick={onClose}>
+                        <X size={14} className="mr-2" />
+                        Tutup
                     </Button>
-                    <Button className="flex-1" onClick={handlePrint}>
-                        <Printer size={14} className="mr-2" />
-                        Cetak
-                    </Button>
+                    <div className="flex gap-2 flex-[2]">
+                        <Button 
+                            variant="outline" 
+                            className="flex-1 h-10 border-[#25D366] text-[#25D366] hover:bg-[#25D366]/10 hover:text-[#25D366] font-bold" 
+                            onClick={handleWhatsApp}
+                        >
+                            <MessageCircle size={14} className="mr-2" />
+                            WA
+                        </Button>
+                        <Button className="flex-1 h-10 shadow-lg shadow-accent/20 font-bold" onClick={handlePrint}>
+                            <Printer size={14} className="mr-2" />
+                            Cetak
+                        </Button>
+                    </div>
                 </div>
             </div>
+
         </Dialog>
     );
 }

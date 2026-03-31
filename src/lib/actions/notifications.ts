@@ -4,51 +4,30 @@ import { db } from "@/db";
 import { notifications, productVariants, products } from "@/db/schema";
 import { eq, desc, and, lt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { getActiveStoreId } from "@/lib/actions/store-context";
 
-export async function getNotifications(userId?: string) {
-  if (userId) {
-    return db
-      .select()
-      .from(notifications)
-      .where(eq(notifications.userId, userId))
-      .orderBy(desc(notifications.createdAt));
-  }
-
+export async function getNotifications() {
+  const storeId = await getActiveStoreId();
   return db
     .select()
     .from(notifications)
+    .where(eq(notifications.storeId, storeId))
     .orderBy(desc(notifications.createdAt))
     .limit(100);
 }
 
-export async function getUnreadNotificationsForPolling(userId: string) {
-  const userNotifs = await db
+export async function getUnreadNotificationsForPolling() {
+  const storeId = await getActiveStoreId();
+  return db
     .select()
     .from(notifications)
     .where(
       and(
         eq(notifications.isRead, false),
-        eq(notifications.userId, userId)
+        eq(notifications.storeId, storeId)
       )
     )
     .orderBy(desc(notifications.createdAt));
-
-  // Also get global unread if userId is null (sistem, promo usually)
-  const globalNotifs = await db
-    .select()
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.isRead, false)
-      )
-    );
-
-  // Filter global ones that have userId null
-  const nullIdNotifs = globalNotifs.filter(n => n.userId === null);
-
-  return [...userNotifs, ...nullIdNotifs].sort((a, b) =>
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
 }
 
 export async function markAsRead(id: string) {
@@ -56,18 +35,12 @@ export async function markAsRead(id: string) {
   revalidatePath("/notifikasi");
 }
 
-export async function markAllAsRead(userId?: string) {
-  if (userId) {
-    await db
-      .update(notifications)
-      .set({ isRead: true })
-      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
-  } else {
-    await db
-      .update(notifications)
-      .set({ isRead: true })
-      .where(eq(notifications.isRead, false));
-  }
+export async function markAllAsRead() {
+  const storeId = await getActiveStoreId();
+  await db
+    .update(notifications)
+    .set({ isRead: true })
+    .where(and(eq(notifications.storeId, storeId), eq(notifications.isRead, false)));
   revalidatePath("/notifikasi");
 }
 
@@ -77,6 +50,7 @@ export async function createNotification(data: {
   message: string;
   priority?: "low" | "normal" | "high" | "urgent";
   userId?: string;
+  storeId: string;
 }) {
   await db.insert(notifications).values({
     type: data.type,
@@ -84,12 +58,15 @@ export async function createNotification(data: {
     message: data.message,
     priority: data.priority || "normal",
     userId: data.userId || null,
+    storeId: data.storeId,
   });
 
   revalidatePath("/notifikasi");
 }
 
 export async function checkLowStock() {
+  const storeId = await getActiveStoreId();
+
   const lowStockVariants = await db
     .select({
       variantId: productVariants.id,
@@ -102,7 +79,12 @@ export async function checkLowStock() {
     })
     .from(productVariants)
     .innerJoin(products, eq(productVariants.productId, products.id))
-    .where(lt(productVariants.stock, productVariants.minStock));
+    .where(
+      and(
+        eq(productVariants.storeId, storeId),
+        lt(productVariants.stock, productVariants.minStock)
+      )
+    );
 
   for (const variant of lowStockVariants) {
     await createNotification({
@@ -110,6 +92,7 @@ export async function checkLowStock() {
       title: "Stok Rendah",
       message: `${variant.productName} (${variant.color}, ${variant.size}) - Sisa stok: ${variant.stock}, Minimum: ${variant.minStock}`,
       priority: variant.stock === 0 ? "urgent" : "high",
+      storeId,
     });
   }
 

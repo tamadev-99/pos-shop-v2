@@ -4,12 +4,9 @@ import { db } from "@/db";
 import { expenseCategories, recurringExpenses, financialTransactions } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireRole, getCurrentUser } from "@/lib/actions/auth-helpers";
+import { requireRole } from "@/lib/actions/auth-helpers";
 import { createAuditLog } from "@/lib/actions/audit";
-
-// ═══════════════════════════════════════════════════════════
-// Expense Categories
-// ═══════════════════════════════════════════════════════════
+import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
 
 const DEFAULT_CATEGORIES = [
     { name: "Penjualan", type: "masuk" as const, isDefault: true },
@@ -21,46 +18,57 @@ const DEFAULT_CATEGORIES = [
 ];
 
 export async function getExpenseCategories() {
-    const categories = await db
+    const storeId = await getActiveStoreId();
+    const cats = await db
         .select()
         .from(expenseCategories)
+        .where(eq(expenseCategories.storeId, storeId))
         .orderBy(expenseCategories.name);
 
-    // If no categories exist yet, seed defaults
-    if (categories.length === 0) {
-        await db.insert(expenseCategories).values(DEFAULT_CATEGORIES);
-        return db.select().from(expenseCategories).orderBy(expenseCategories.name);
+    if (cats.length === 0) {
+        await db.insert(expenseCategories).values(
+            DEFAULT_CATEGORIES.map((c) => ({ ...c, storeId }))
+        );
+        return db
+            .select()
+            .from(expenseCategories)
+            .where(eq(expenseCategories.storeId, storeId))
+            .orderBy(expenseCategories.name);
     }
 
-    return categories;
+    return cats;
 }
 
 export async function createExpenseCategory(data: {
     name: string;
     type: "masuk" | "keluar";
 }) {
-    const user = await requireRole("manager", "owner");
+    await requireRole("manager", "owner");
+    const { storeId, employeeProfileId, userName } = await getStoreContext();
+
     await db.insert(expenseCategories).values({
         name: data.name,
         type: data.type,
         isDefault: false,
+        storeId,
     });
 
     createAuditLog({
-        userId: user.id,
-        userName: user.name || "Unknown",
+        userName,
         action: "keuangan",
         detail: `Kategori pengeluaran dibuat: ${data.name}`,
         metadata: { name: data.name, type: data.type },
+        storeId,
+        employeeProfileId,
     }).catch(() => {});
 
-    revalidatePath("/keuangan");
     revalidatePath("/laporan");
 }
 
 export async function deleteExpenseCategory(id: string) {
-    const user = await requireRole("manager", "owner");
-    // Don't allow deleting default categories
+    await requireRole("manager", "owner");
+    const { storeId, employeeProfileId, userName } = await getStoreContext();
+
     const cat = await db.select().from(expenseCategories).where(eq(expenseCategories.id, id));
     if (cat[0]?.isDefault) {
         throw new Error("Tidak bisa menghapus kategori bawaan");
@@ -68,26 +76,23 @@ export async function deleteExpenseCategory(id: string) {
     await db.delete(expenseCategories).where(eq(expenseCategories.id, id));
 
     createAuditLog({
-        userId: user.id,
-        userName: user.name || "Unknown",
+        userName,
         action: "keuangan",
         detail: `Kategori pengeluaran dihapus: ${cat[0]?.name || id}`,
         metadata: { categoryId: id, name: cat[0]?.name },
+        storeId,
+        employeeProfileId,
     }).catch(() => {});
 
-    revalidatePath("/keuangan");
     revalidatePath("/laporan");
 }
 
-// ═══════════════════════════════════════════════════════════
-// Recurring Expenses
-// ═══════════════════════════════════════════════════════════
-
 export async function getRecurringExpenses() {
+    const storeId = await getActiveStoreId();
     return db
         .select()
         .from(recurringExpenses)
-        .where(eq(recurringExpenses.isActive, true))
+        .where(and(eq(recurringExpenses.isActive, true), eq(recurringExpenses.storeId, storeId)))
         .orderBy(recurringExpenses.nextDueDate);
 }
 
@@ -98,7 +103,8 @@ export async function createRecurringExpense(data: {
     frequency: "harian" | "mingguan" | "bulanan" | "tahunan";
     nextDueDate: string;
 }) {
-    const user = await requireRole("manager", "owner");
+    await requireRole("manager", "owner");
+    const { storeId, employeeProfileId, userName } = await getStoreContext();
 
     await db.insert(recurringExpenses).values({
         description: data.description,
@@ -106,45 +112,46 @@ export async function createRecurringExpense(data: {
         amount: data.amount,
         frequency: data.frequency,
         nextDueDate: data.nextDueDate,
-        createdBy: user?.id || null,
+        employeeProfileId,
+        storeId,
     });
 
     createAuditLog({
-        userId: user.id,
-        userName: user.name || "Unknown",
+        userName,
         action: "keuangan",
         detail: `Pengeluaran rutin dibuat: ${data.description} (${data.frequency})`,
         metadata: { description: data.description, amount: data.amount, frequency: data.frequency },
+        storeId,
+        employeeProfileId,
     }).catch(() => {});
 
-    revalidatePath("/keuangan");
+    revalidatePath("/laporan");
 }
 
 export async function deleteRecurringExpense(id: string) {
-    const user = await requireRole("manager", "owner");
+    await requireRole("manager", "owner");
+    const { storeId, employeeProfileId, userName } = await getStoreContext();
+
     await db
         .update(recurringExpenses)
         .set({ isActive: false })
         .where(eq(recurringExpenses.id, id));
 
     createAuditLog({
-        userId: user.id,
-        userName: user.name || "Unknown",
+        userName,
         action: "keuangan",
         detail: `Pengeluaran rutin dihapus`,
         metadata: { recurringExpenseId: id },
+        storeId,
+        employeeProfileId,
     }).catch(() => {});
 
-    revalidatePath("/keuangan");
+    revalidatePath("/laporan");
 }
 
-/**
- * Process due recurring expenses — creates transactions for all overdue items
- * and advances their nextDueDate. Call this on page load or via cron.
- */
 export async function processRecurringExpenses() {
+    const storeId = await getActiveStoreId();
     const today = new Date().toISOString().split("T")[0];
-    const user = await getCurrentUser();
 
     const dueExpenses = await db
         .select()
@@ -152,31 +159,29 @@ export async function processRecurringExpenses() {
         .where(
             and(
                 eq(recurringExpenses.isActive, true),
+                eq(recurringExpenses.storeId, storeId),
             )
         );
 
     let processed = 0;
 
     for (const expense of dueExpenses) {
-        // Process all overdue dates
         let nextDue = expense.nextDueDate;
         while (nextDue <= today) {
-            // Create the transaction
             await db.insert(financialTransactions).values({
                 date: nextDue,
                 type: "keluar",
                 category: expense.category,
                 description: `[Otomatis] ${expense.description}`,
                 amount: expense.amount,
-                createdBy: user?.id || expense.createdBy || null,
+                employeeProfileId: expense.employeeProfileId,
+                storeId,
             });
 
-            // Advance to next due date
             nextDue = advanceDate(nextDue, expense.frequency);
             processed++;
         }
 
-        // Update the next due date
         await db
             .update(recurringExpenses)
             .set({ nextDueDate: nextDue })
@@ -184,7 +189,6 @@ export async function processRecurringExpenses() {
     }
 
     if (processed > 0) {
-        revalidatePath("/keuangan");
         revalidatePath("/laporan");
     }
 

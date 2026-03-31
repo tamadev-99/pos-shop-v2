@@ -1,8 +1,10 @@
+import { enforceRouteAccess } from '@/lib/actions/permissions';
 import { getActiveShifts, getShiftHistory } from "@/lib/actions/shifts";
 import { getUsers } from "@/lib/actions/settings";
 import ShiftClient from "./shift-client";
 
 export default async function ShiftPage() {
+  await enforceRouteAccess('/shift');
     const [activeShifts, shiftHistoryResult, users] = await Promise.all([
         getActiveShifts(),
         getShiftHistory(1, 20),

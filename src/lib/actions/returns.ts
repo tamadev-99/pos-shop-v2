@@ -6,7 +6,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getCurrentUser } from "@/lib/actions/auth-helpers";
+import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
 
 function generateReturnId() {
   const now = new Date();
@@ -16,14 +16,16 @@ function generateReturnId() {
 }
 
 export async function getReturns(filters?: { status?: string }) {
-  const conditions = [];
+  const storeId = await getActiveStoreId();
+  const conditions = [eq(returns.storeId, storeId)];
+
   if (filters?.status) {
     conditions.push(eq(returns.status, filters.status as "diproses" | "disetujui" | "ditolak" | "selesai"));
   }
 
   return db.query.returns.findMany({
-    where: conditions.length > 0 ? and(...conditions) : undefined,
-    with: { items: true, customer: true },
+    where: and(...conditions),
+    with: { items: true, customer: true, employee: true },
     orderBy: [desc(returns.createdAt)],
   });
 }
@@ -41,6 +43,7 @@ export async function createReturn(data: {
     unitPrice: number;
   }[];
 }) {
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
   const id = generateReturnId();
   const today = new Date().toISOString().split("T")[0];
   const refundAmount = data.items.reduce((sum, item) => sum + item.unitPrice * item.qty, 0);
@@ -53,6 +56,8 @@ export async function createReturn(data: {
     reason: data.reason,
     refundMethod: data.refundMethod || null,
     refundAmount,
+    storeId,
+    employeeProfileId: employeeProfileId || null,
   });
 
   await db.insert(returnItems).values(
@@ -63,18 +68,19 @@ export async function createReturn(data: {
       variantInfo: item.variantInfo || "",
       qty: item.qty,
       unitPrice: item.unitPrice,
+      storeId,
     }))
   );
 
-  revalidatePath("/retur");
+  revalidatePath("/pesanan");
 
-  const currentUser = await getCurrentUser();
   createAuditLog({
-    userId: currentUser?.id,
-    userName: currentUser?.name || "Admin",
+    userName,
     action: "retur",
     detail: `Retur baru ${id} untuk pesanan ${data.orderId}`,
     metadata: { returnId: id, orderId: data.orderId, refundAmount },
+    storeId,
+    employeeProfileId,
   }).catch(() => { });
 
   return id;
@@ -83,10 +89,11 @@ export async function createReturn(data: {
 export async function processReturn(
   id: string,
   decision: "disetujui" | "ditolak",
-  processedBy?: string
 ) {
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
+
   const returnRecord = await db.query.returns.findFirst({
-    where: eq(returns.id, id),
+    where: and(eq(returns.id, id), eq(returns.storeId, storeId)),
     with: { items: true },
   });
 
@@ -96,12 +103,11 @@ export async function processReturn(
     .update(returns)
     .set({
       status: decision === "disetujui" ? "selesai" : "ditolak",
-      processedBy: processedBy || null,
     })
     .where(eq(returns.id, id));
 
+
   if (decision === "disetujui") {
-    // Restore stock
     for (const item of returnRecord.items) {
       if (item.variantId) {
         await db
@@ -111,7 +117,6 @@ export async function processReturn(
       }
     }
 
-    // Create refund financial entry
     const today = new Date().toISOString().split("T")[0];
     await db.insert(financialTransactions).values({
       date: today,
@@ -120,9 +125,10 @@ export async function processReturn(
       description: `Refund retur ${id}`,
       amount: returnRecord.refundAmount || 0,
       orderId: returnRecord.orderId,
+      storeId,
+      employeeProfileId: employeeProfileId || null,
     });
 
-    // Bug Fix #2: Deduct shift sales if the order was linked to a shift
     const originalOrder = await db.query.orders.findFirst({
       where: eq(orders.id, returnRecord.orderId),
     });
@@ -144,16 +150,16 @@ export async function processReturn(
     }
   }
 
-  revalidatePath("/retur");
-  revalidatePath("/inventaris");
-  revalidatePath("/keuangan");
+  revalidatePath("/pesanan");
+  revalidatePath("/produk");
+  revalidatePath("/laporan");
 
-  const currentUser2 = await getCurrentUser();
   createAuditLog({
-    userId: currentUser2?.id,
-    userName: currentUser2?.name || processedBy || "Admin",
+    userName,
     action: "retur",
     detail: `Retur ${id} ${decision === "disetujui" ? "disetujui" : "ditolak"}`,
     metadata: { returnId: id, decision },
+    storeId,
+    employeeProfileId,
   }).catch(() => { });
 }

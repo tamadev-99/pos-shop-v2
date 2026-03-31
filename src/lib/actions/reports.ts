@@ -2,9 +2,11 @@
 
 import { db } from "@/db";
 import { orders, orderItems, productVariants, products, categories, customers, purchaseOrders } from "@/db/schema";
-import { eq, desc, and, gte, lte, sql, or, isNotNull, asc } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql, isNotNull, asc } from "drizzle-orm";
+import { getActiveStoreId } from "@/lib/actions/store-context";
 
 export async function getDailySalesReport(date: string) {
+  const storeId = await getActiveStoreId();
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(date);
@@ -15,6 +17,7 @@ export async function getDailySalesReport(date: string) {
     .from(orders)
     .where(
       and(
+        eq(orders.storeId, storeId),
         eq(orders.status, "selesai"),
         gte(orders.date, startOfDay),
         lte(orders.date, endOfDay)
@@ -35,6 +38,7 @@ export async function getDailySalesReport(date: string) {
 }
 
 export async function getMonthlySalesReport(year: number, month: number) {
+  const storeId = await getActiveStoreId();
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
@@ -43,6 +47,7 @@ export async function getMonthlySalesReport(year: number, month: number) {
     .from(orders)
     .where(
       and(
+        eq(orders.storeId, storeId),
         eq(orders.status, "selesai"),
         gte(orders.date, startDate),
         lte(orders.date, endDate)
@@ -51,7 +56,6 @@ export async function getMonthlySalesReport(year: number, month: number) {
 
   const totalSales = monthOrders.reduce((sum, o) => sum + o.total, 0);
 
-  // Group by day
   const dailyBreakdown: Record<string, { sales: number; orders: number }> = {};
   for (const order of monthOrders) {
     const day = order.date.toISOString().split("T")[0];
@@ -72,6 +76,7 @@ export async function getMonthlySalesReport(year: number, month: number) {
 }
 
 export async function getBestSellers(limit = 10) {
+  const storeId = await getActiveStoreId();
   const result = await db
     .select({
       productName: orderItems.productName,
@@ -80,7 +85,7 @@ export async function getBestSellers(limit = 10) {
     })
     .from(orderItems)
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .where(eq(orders.status, "selesai"))
+    .where(and(eq(orders.status, "selesai"), eq(orders.storeId, storeId)))
     .groupBy(orderItems.productName)
     .orderBy(desc(sql`SUM(${orderItems.qty})`))
     .limit(limit);
@@ -89,6 +94,7 @@ export async function getBestSellers(limit = 10) {
 }
 
 export async function getInventoryValuation() {
+  const storeId = await getActiveStoreId();
   const result = await db
     .select({
       totalValue: sql<number>`SUM(${productVariants.stock} * ${productVariants.buyPrice})::int`,
@@ -96,18 +102,18 @@ export async function getInventoryValuation() {
       totalSKUs: sql<number>`COUNT(*)::int`,
     })
     .from(productVariants)
-    .where(eq(productVariants.status, "aktif"));
+    .where(and(eq(productVariants.status, "aktif"), eq(productVariants.storeId, storeId)));
 
   return result[0] || { totalValue: 0, totalItems: 0, totalSKUs: 0 };
 }
 
 export async function getDashboardStats() {
+  const storeId = await getActiveStoreId();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const endOfDay = new Date();
   endOfDay.setHours(23, 59, 59, 999);
 
-  // Yesterday range
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   const endOfYesterday = new Date(yesterday);
@@ -115,41 +121,39 @@ export async function getDashboardStats() {
 
   const todayStr = today.toISOString().split("T")[0];
 
-  // Single query for today's order stats
   const [todayOrders, newCustomersResult, pendingPOsResult] = await Promise.all([
     db
       .select()
       .from(orders)
       .where(
         and(
+          eq(orders.storeId, storeId),
           eq(orders.status, "selesai"),
           gte(orders.date, today),
           lte(orders.date, endOfDay)
         )
       ),
-    // New customers today
     db
       .select({ count: sql<number>`COUNT(*)::int` })
       .from(customers)
-      .where(eq(customers.joinDate, todayStr)),
-    // Pending purchase orders
+      .where(and(eq(customers.storeId, storeId), eq(customers.joinDate, todayStr))),
     db
       .select({ count: sql<number>`COUNT(*)::int` })
       .from(purchaseOrders)
       .where(
-        or(
-          eq(purchaseOrders.status, "diproses"),
-          eq(purchaseOrders.status, "dikirim")
+        and(
+          eq(purchaseOrders.storeId, storeId),
+          sql`${purchaseOrders.status} IN ('diproses', 'dikirim')`
         )
       ),
   ]);
 
-  // Yesterday's orders for comparison
   const yesterdayOrders = await db
     .select()
     .from(orders)
     .where(
       and(
+        eq(orders.storeId, storeId),
         eq(orders.status, "selesai"),
         gte(orders.date, yesterday),
         lte(orders.date, endOfYesterday)
@@ -163,7 +167,6 @@ export async function getDashboardStats() {
   const yesterdaySales = yesterdayOrders.reduce((sum, o) => sum + o.total, 0);
   const yesterdayOrderCount = yesterdayOrders.length;
 
-  // Fix #4: Single JOIN query for products sold today (was N+1)
   const todayOrderIds = todayOrders.map((o) => o.id);
   let productsSold = 0;
   if (todayOrderIds.length > 0) {
@@ -178,14 +181,12 @@ export async function getDashboardStats() {
     productsSold = soldResult[0]?.totalQty ?? 0;
   }
 
-  // #13: Payment method breakdown
   const paymentBreakdown: Record<string, number> = {};
   for (const order of todayOrders) {
     const method = order.paymentMethod || "tunai";
     paymentBreakdown[method] = (paymentBreakdown[method] || 0) + order.total;
   }
 
-  // #13: Low stock items (stock <= minStock)
   const lowStockItems = await db
     .select({
       id: productVariants.id,
@@ -200,6 +201,7 @@ export async function getDashboardStats() {
     .innerJoin(products, eq(productVariants.productId, products.id))
     .where(
       and(
+        eq(productVariants.storeId, storeId),
         eq(productVariants.status, "aktif"),
         sql`${productVariants.stock} <= ${productVariants.minStock}`
       )
@@ -207,7 +209,6 @@ export async function getDashboardStats() {
     .orderBy(productVariants.stock)
     .limit(10);
 
-  // Fix #4: Single query for 7-day chart data (was 7 separate queries)
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 6);
   weekAgo.setHours(0, 0, 0, 0);
@@ -217,13 +218,13 @@ export async function getDashboardStats() {
     .from(orders)
     .where(
       and(
+        eq(orders.storeId, storeId),
         eq(orders.status, "selesai"),
         gte(orders.date, weekAgo),
         lte(orders.date, endOfDay)
       )
     );
 
-  // Group by day in JS (faster than 7 DB queries)
   const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
   const weekMap = new Map<string, number>();
 
@@ -244,7 +245,6 @@ export async function getDashboardStats() {
     penjualan: sales,
   }));
 
-  // ── NEW: Gross Profit (Revenue - COGS) ──
   let grossProfit = 0;
   if (todayOrderIds.length > 0) {
     const profitResult = await db
@@ -259,7 +259,6 @@ export async function getDashboardStats() {
     grossProfit = (profitResult[0]?.revenue ?? 0) - (profitResult[0]?.cogs ?? 0);
   }
 
-  // ── NEW: Unique customer count ──
   const customerSet = new Set<string>();
   for (const order of todayOrders) {
     if (order.customerId) customerSet.add(order.customerId);
@@ -269,7 +268,6 @@ export async function getDashboardStats() {
   const newCustomers = newCustomersResult[0]?.count ?? 0;
   const pendingPurchaseOrders = pendingPOsResult[0]?.count ?? 0;
 
-  // ── NEW: Hourly sales breakdown (24h) ──
   const hourlySales: { hour: number; sales: number; orders: number }[] = [];
   const hourMap = new Map<number, { sales: number; orders: number }>();
   for (let h = 0; h < 24; h++) hourMap.set(h, { sales: 0, orders: 0 });
@@ -283,7 +281,6 @@ export async function getDashboardStats() {
     hourlySales.push({ hour, ...data });
   }
 
-  // ── NEW: Monthly sales (6 months) ──
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
   sixMonthsAgo.setDate(1);
@@ -298,6 +295,7 @@ export async function getDashboardStats() {
     .from(orders)
     .where(
       and(
+        eq(orders.storeId, storeId),
         eq(orders.status, "selesai"),
         gte(orders.date, sixMonthsAgo)
       )
@@ -315,7 +313,6 @@ export async function getDashboardStats() {
     };
   });
 
-  // ── NEW: Category-level sales ──
   const categoryResult = await db
     .select({
       categoryName: categories.name,
@@ -329,6 +326,7 @@ export async function getDashboardStats() {
     .innerJoin(categories, eq(products.categoryId, categories.id))
     .where(
       and(
+        eq(orders.storeId, storeId),
         eq(orders.status, "selesai"),
         gte(orders.date, weekAgo),
         lte(orders.date, endOfDay)
@@ -350,34 +348,26 @@ export async function getDashboardStats() {
     avgTransaction,
     productsSold,
     weekData,
-    // #13 enrichment data
     yesterdaySales,
     yesterdayOrderCount,
     paymentBreakdown,
     lowStockItems,
-    // Dashboard v2 data
     grossProfit,
     uniqueCustomers,
     hourlySales,
     monthlySales,
     categorySales,
-    // Dashboard v3 data (Moved from TodaySummary)
     newCustomers,
     pendingPurchaseOrders,
   };
 }
 
-
-
 // ═══════════════════════════════════════════════════════════
 // Advanced Analytics Reports
 // ═══════════════════════════════════════════════════════════
 
-/**
- * Sales by Hour Heatmap — 7x24 matrix of sales amounts
- * Rows = day of week (0=Sunday..6=Saturday), Cols = hour (0..23)
- */
 export async function getSalesByHourReport() {
+  const storeId = await getActiveStoreId();
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   thirtyDaysAgo.setHours(0, 0, 0, 0);
@@ -392,6 +382,7 @@ export async function getSalesByHourReport() {
     .from(orders)
     .where(
       and(
+        eq(orders.storeId, storeId),
         eq(orders.status, "selesai"),
         gte(orders.date, thirtyDaysAgo)
       )
@@ -401,7 +392,6 @@ export async function getSalesByHourReport() {
       sql`EXTRACT(HOUR FROM ${orders.date})`
     );
 
-  // Build 7x24 matrix
   const matrix: { sales: number; orders: number }[][] = Array.from({ length: 7 }, () =>
     Array.from({ length: 24 }, () => ({ sales: 0, orders: 0 }))
   );
@@ -416,15 +406,12 @@ export async function getSalesByHourReport() {
   return { matrix };
 }
 
-/**
- * Product Performance Trends — daily sales for top 10 products over N days
- */
 export async function getProductTrends(days: number = 30) {
+  const storeId = await getActiveStoreId();
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
   startDate.setHours(0, 0, 0, 0);
 
-  // First get top 10 products by revenue in the period
   const topProducts = await db
     .select({
       productName: orderItems.productName,
@@ -434,6 +421,7 @@ export async function getProductTrends(days: number = 30) {
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
     .where(
       and(
+        eq(orders.storeId, storeId),
         eq(orders.status, "selesai"),
         gte(orders.date, startDate)
       )
@@ -447,7 +435,6 @@ export async function getProductTrends(days: number = 30) {
     return { products: [], series: [] };
   }
 
-  // Get daily breakdown for these products
   const dailyData = await db
     .select({
       date: sql<string>`TO_CHAR(${orders.date}, 'YYYY-MM-DD')`,
@@ -459,6 +446,7 @@ export async function getProductTrends(days: number = 30) {
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
     .where(
       and(
+        eq(orders.storeId, storeId),
         eq(orders.status, "selesai"),
         gte(orders.date, startDate),
         sql`${orderItems.productName} IN (${sql.join(productNames.map(n => sql`${n}`), sql`, `)})`
@@ -470,7 +458,6 @@ export async function getProductTrends(days: number = 30) {
     )
     .orderBy(sql`TO_CHAR(${orders.date}, 'YYYY-MM-DD')`);
 
-  // Build date range
   const dates: string[] = [];
   const d = new Date(startDate);
   const now = new Date();
@@ -479,7 +466,6 @@ export async function getProductTrends(days: number = 30) {
     d.setDate(d.getDate() + 1);
   }
 
-  // Build series: each product gets an array of daily values
   const series: { productName: string; data: { date: string; sales: number; qty: number }[] }[] =
     productNames.map((name) => ({
       productName: name,
@@ -492,10 +478,8 @@ export async function getProductTrends(days: number = 30) {
   return { products: productNames, series };
 }
 
-/**
- * Profit Margin Analysis — revenue, COGS, margin % grouped by category
- */
 export async function getProfitMarginReport() {
+  const storeId = await getActiveStoreId();
   const result = await db
     .select({
       categoryName: categories.name,
@@ -509,7 +493,7 @@ export async function getProfitMarginReport() {
     .innerJoin(productVariants, eq(orderItems.variantId, productVariants.id))
     .innerJoin(products, eq(productVariants.productId, products.id))
     .innerJoin(categories, eq(products.categoryId, categories.id))
-    .where(eq(orders.status, "selesai"))
+    .where(and(eq(orders.status, "selesai"), eq(orders.storeId, storeId)))
     .groupBy(categories.name)
     .orderBy(desc(sql`SUM(${orderItems.subtotal})`));
 
@@ -540,11 +524,8 @@ export async function getProfitMarginReport() {
   return { categories: data, totals: { ...totals, marginPct: overallMargin } };
 }
 
-/**
- * Customer Purchase Frequency — avg days between purchases, total orders, repeat rate
- */
 export async function getCustomerFrequencyReport() {
-  // Get all customers who have at least 1 completed order
+  const storeId = await getActiveStoreId();
   const customerOrders = await db
     .select({
       customerId: orders.customerId,
@@ -554,13 +535,13 @@ export async function getCustomerFrequencyReport() {
     .from(orders)
     .where(
       and(
+        eq(orders.storeId, storeId),
         eq(orders.status, "selesai"),
         isNotNull(orders.customerId)
       )
     )
     .orderBy(asc(orders.customerId), asc(orders.date));
 
-  // Group by customer
   const customerMap = new Map<string, { name: string; dates: Date[] }>();
   for (const row of customerOrders) {
     if (!row.customerId) continue;
@@ -607,7 +588,6 @@ export async function getCustomerFrequencyReport() {
     });
   }
 
-  // Sort by total orders desc
   customerStats.sort((a, b) => b.totalOrders - a.totalOrders);
 
   const repeatRate = totalCustomers > 0 ? Math.round((repeatCustomers / totalCustomers) * 10000) / 100 : 0;

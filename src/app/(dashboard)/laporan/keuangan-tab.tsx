@@ -96,6 +96,8 @@ interface Transaction {
   type: string;
   amount: number;
   attachmentUrl?: string | null;
+  employee?: { name: string } | null;
+  createdByUser?: { name: string } | null;
 }
 
 interface ExpenseCategory {
@@ -609,8 +611,8 @@ export function KeuanganTab({
                 <th className="px-3 md:px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider hidden md:table-cell">
                   Kategori
                 </th>
-                <th className="px-3 md:px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">
-                  Tipe
+                <th className="px-3 md:px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider hidden lg:table-cell">
+                  Oleh
                 </th>
                 <th className="px-3 md:px-4 py-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider text-right">
                   Jumlah
@@ -636,6 +638,9 @@ export function KeuanganTab({
                     <Badge variant={typeVariant[txn.type]}>
                       {typeLabel[txn.type]}
                     </Badge>
+                  </td>
+                  <td className="px-3 md:px-4 py-3 text-[10px] text-muted-dim hidden lg:table-cell">
+                    {txn.employee?.name || txn.createdByUser?.name || "Sistem"}
                   </td>
                   <td className="px-3 md:px-4 py-3 text-xs font-semibold font-num text-right whitespace-nowrap">
                     <span

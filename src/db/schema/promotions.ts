@@ -1,4 +1,5 @@
 import { pgTable, text, integer, timestamp, boolean, pgEnum, jsonb } from "drizzle-orm/pg-core";
+import { stores } from "./auth";
 
 export const promoTypeEnum = pgEnum("promo_type", ["percentage", "fixed", "buy_x_get_y", "bundle"]);
 export const promoAppliesToEnum = pgEnum("promo_applies_to", ["all", "category", "product"]);
@@ -18,5 +19,6 @@ export const promotions = pgTable("promotions", {
   isActive: boolean("is_active").notNull().default(true),
   appliesTo: promoAppliesToEnum("applies_to").notNull().default("all"),
   targetIds: jsonb("target_ids").$type<string[]>().default([]),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

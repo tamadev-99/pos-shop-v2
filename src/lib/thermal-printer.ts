@@ -84,8 +84,9 @@ export interface ReceiptPrintData {
   storeName: string;
   storeAddress: string;
   storePhone: string;
-  receiptHeader: string;
   receiptFooter: string;
+  receiptLogo?: string;
+  receiptLogoImage?: string;
 }
 
 export interface PrinterConfig {
@@ -95,7 +96,7 @@ export interface PrinterConfig {
 }
 
 // ── Build ESC/POS Receipt Commands ────────────────────────────────────────────
-export function buildReceiptCommands(data: ReceiptPrintData, paperWidth: "58" | "80" = "58"): Uint8Array {
+export async function buildReceiptCommands(data: ReceiptPrintData, paperWidth: "58" | "80" = "58"): Promise<Uint8Array> {
   const W = paperWidth === "80" ? 48 : 32; // characters per line
   const fmtR = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
   const cmds: number[] = [];
@@ -107,9 +108,84 @@ export function buildReceiptCommands(data: ReceiptPrintData, paperWidth: "58" | 
   // Initialize
   push(CMD.INIT);
 
+  if (data.receiptLogo === "yes" && data.receiptLogoImage) {
+    try {
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = data.receiptLogoImage!;
+      });
+
+      const maxWidthDots = paperWidth === "80" ? 576 : 384;
+      // We limit logo width to 50% of paper for nicer look, or full width if needed? Let's use max width
+      // but typical logos on receipts look better if they aren't huge. Let's limit width to maybe maxWidthDots * 0.7
+      const maxLogoW = Math.round(maxWidthDots * 0.7);
+      let printW = img.width;
+      let printH = img.height;
+
+      if (printW > maxLogoW) {
+        printH = Math.round((printH * maxLogoW) / printW);
+        printW = maxLogoW;
+      }
+
+      // Ensure width is a multiple of 8 (required for byte alignment)
+      printW = Math.ceil(printW / 8) * 8;
+      const bytesPerRow = printW / 8;
+
+      const printCanvas = document.createElement("canvas");
+      printCanvas.width = printW;
+      printCanvas.height = printH;
+      const pCtx = printCanvas.getContext("2d")!;
+      pCtx.fillStyle = "#fff";
+      pCtx.fillRect(0, 0, printW, printH);
+      pCtx.drawImage(img, 0, 0, printW, printH);
+
+      const imageData = pCtx.getImageData(0, 0, printW, printH);
+      const pixels = imageData.data;
+
+      const bitmapRows: number[][] = [];
+      for (let y = 0; y < printH; y++) {
+        const row: number[] = [];
+        for (let byteIdx = 0; byteIdx < bytesPerRow; byteIdx++) {
+          let byte = 0;
+          for (let bit = 0; bit < 8; bit++) {
+            const x = byteIdx * 8 + bit;
+            if (x < printW) {
+              const pixelOffset = (y * printW + x) * 4;
+              const r = pixels[pixelOffset];
+              const g = pixels[pixelOffset + 1];
+              const b = pixels[pixelOffset + 2];
+              const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+              if (gray < 128) byte |= (0x80 >> bit);
+            }
+          }
+          row.push(byte);
+        }
+        bitmapRows.push(row);
+      }
+
+      push([ESC, 0x33, 0x00]); // 0 line spacing
+      push(CMD.ALIGN_CENTER);
+
+      const xL = bytesPerRow & 0xff;
+      const xH = (bytesPerRow >> 8) & 0xff;
+      const yL = printH & 0xff;
+      const yH = (printH >> 8) & 0xff;
+
+      push([GS, 0x76, 0x30, 0x00, xL, xH, yL, yH]);
+      for (const row of bitmapRows) push(row);
+      
+      push([ESC, 0x32]); // default line spacing
+      push(CMD.LF);
+    } catch (e) {
+      console.warn("Failed to print logo:", e);
+    }
+  }
+
   // Header — centered, bold, double height
   push(CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.DOUBLE_HEIGHT_ON);
-  push(line(data.receiptHeader || data.storeName));
+  push(line(data.storeName));
   push(CMD.SIZE_NORMAL, CMD.BOLD_OFF);
 
   if (data.storeAddress) push(line(data.storeAddress));
@@ -467,7 +543,8 @@ export function printViaBrowser(data: ReceiptPrintData, paperWidth: "58" | "80" 
     </head><body>
       
       <div class="header">
-        <div class="store-title">${data.receiptHeader || data.storeName}</div>
+        ${data.receiptLogo === "yes" && data.receiptLogoImage ? `<img src="${data.receiptLogoImage}" style="max-width: 150px; max-height: 150px; margin: 0 auto 10px; display: block; filter: grayscale(100%);" />` : ""}
+        <div class="store-title">${data.storeName}</div>
         ${data.storeAddress ? `<div class="store-subtitle">${data.storeAddress}</div>` : ""}
         ${data.storePhone ? `<div class="store-subtitle">${data.storePhone}</div>` : ""}
       </div>

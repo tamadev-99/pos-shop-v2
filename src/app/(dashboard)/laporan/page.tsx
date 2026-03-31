@@ -1,3 +1,4 @@
+import { enforceRouteAccess } from '@/lib/actions/permissions';
 import {
   getDailySalesReport,
   getMonthlySalesReport,
@@ -9,6 +10,7 @@ import { getExpenseCategories, getRecurringExpenses, processRecurringExpenses } 
 import LaporanClient from "./laporan-client";
 
 export default async function LaporanPage() {
+  await enforceRouteAccess('/laporan');
   const now = new Date();
   const todayString = now.toISOString().split("T")[0];
   const year = now.getFullYear();
@@ -83,7 +85,11 @@ export default async function LaporanPage() {
       inventoryValuation={inventoryValuation}
       initialTransactions={mappedTransactions}
       saldoKas={saldoKas}
-      todayReconciliation={todayReconciliation}
+      todayReconciliation={{
+        income: todayReconciliation.income,
+        expense: todayReconciliation.expense,
+        net: todayReconciliation.net,
+      }}
       todayReconciliationLog={todayReconciliationLog}
       expenseCategories={mappedCategories}
       recurringExpenses={mappedRecurring}

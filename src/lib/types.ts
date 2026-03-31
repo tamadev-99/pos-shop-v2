@@ -32,6 +32,7 @@ export interface CartItem {
   color: string;
   size: string;
   price: number;
+  originalPrice?: number;
   qty: number;
 }
 

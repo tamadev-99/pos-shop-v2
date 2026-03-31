@@ -1,8 +1,10 @@
+import { enforceRouteAccess } from '@/lib/actions/permissions';
 import { getPromotions } from "@/lib/actions/promotions";
 import { getCategories, getProducts } from "@/lib/actions/products";
 import PromosiClient from "./promosi-client";
 
 export default async function PromosiPage() {
+  await enforceRouteAccess('/promosi');
   const [promotions, categories, products] = await Promise.all([
     getPromotions(),
     getCategories(),

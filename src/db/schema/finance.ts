@@ -1,10 +1,12 @@
-import { pgTable, text, integer, timestamp, pgEnum, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, pgEnum, boolean, foreignKey } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
-import { users } from "./auth";
+import { stores } from "./auth";
+import { employeeProfiles } from "./profiles";
 
 export const transactionTypeEnum = pgEnum("transaction_type", ["masuk", "keluar"]);
 export const shiftStatusEnum = pgEnum("shift_status", ["active", "closed"]);
 export const recurringFrequencyEnum = pgEnum("recurring_frequency", ["harian", "mingguan", "bulanan", "tahunan"]);
+export const reconciliationStatusEnum = pgEnum("reconciliation_status", ["draft", "completed"]);
 
 export const financialTransactions = pgTable("financial_transactions", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -15,13 +17,20 @@ export const financialTransactions = pgTable("financial_transactions", {
   amount: integer("amount").notNull(),
   orderId: text("order_id"),
   attachmentUrl: text("attachment_url"),
-  createdBy: text("created_by").references(() => users.id),
+  employeeProfileId: text("employee_profile_id"),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  employeeFk: foreignKey({
+    columns: [table.employeeProfileId],
+    foreignColumns: [employeeProfiles.id],
+    name: "fin_trans_emp_fk",
+  }),
+}));
 
 export const shifts = pgTable("shifts", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  cashierId: text("cashier_id").notNull().references(() => users.id),
+  employeeProfileId: text("employee_profile_id").notNull().references(() => employeeProfiles.id),
   openedAt: timestamp("opened_at").notNull().defaultNow(),
   closedAt: timestamp("closed_at"),
   openingBalance: integer("opening_balance").notNull(),
@@ -34,18 +43,18 @@ export const shifts = pgTable("shifts", {
   totalTransactions: integer("total_transactions").default(0),
   status: shiftStatusEnum("status").notNull().default("active"),
   notes: text("notes"),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
 });
 
-// Custom expense categories
 export const expenseCategories = pgTable("expense_categories", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   type: transactionTypeEnum("type").notNull().default("keluar"),
   isDefault: boolean("is_default").default(false),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// Recurring expenses
 export const recurringExpenses = pgTable("recurring_expenses", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   description: text("description").notNull(),
@@ -54,33 +63,16 @@ export const recurringExpenses = pgTable("recurring_expenses", {
   frequency: recurringFrequencyEnum("frequency").notNull(),
   nextDueDate: text("next_due_date").notNull(),
   isActive: boolean("is_active").default(true),
-  createdBy: text("created_by").references(() => users.id),
+  employeeProfileId: text("employee_profile_id"),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-// Relations
-export const shiftsRelations = relations(shifts, ({ one }) => ({
-  cashier: one(users, {
-    fields: [shifts.cashierId],
-    references: [users.id],
+}, (table) => ({
+  employeeFk: foreignKey({
+    columns: [table.employeeProfileId],
+    foreignColumns: [employeeProfiles.id],
+    name: "rec_exp_emp_fk",
   }),
 }));
-
-export const financialTransactionsRelations = relations(financialTransactions, ({ one }) => ({
-  createdByUser: one(users, {
-    fields: [financialTransactions.createdBy],
-    references: [users.id],
-  }),
-}));
-
-export const recurringExpensesRelations = relations(recurringExpenses, ({ one }) => ({
-  createdByUser: one(users, {
-    fields: [recurringExpenses.createdBy],
-    references: [users.id],
-  }),
-}));
-
-export const reconciliationStatusEnum = pgEnum("reconciliation_status", ["draft", "completed"]);
 
 export const dailyReconciliations = pgTable("daily_reconciliations", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -91,14 +83,60 @@ export const dailyReconciliations = pgTable("daily_reconciliations", {
   difference: integer("difference").notNull(),
   notes: text("notes"),
   status: reconciliationStatusEnum("status").notNull().default("draft"),
-  reconciledBy: text("reconciled_by").references(() => users.id),
+  employeeProfileId: text("employee_profile_id"),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
-
-export const dailyReconciliationsRelations = relations(dailyReconciliations, ({ one }) => ({
-  reconciledByUser: one(users, {
-    fields: [dailyReconciliations.reconciledBy],
-    references: [users.id],
+}, (table) => ({
+  employeeFk: foreignKey({
+    columns: [table.employeeProfileId],
+    foreignColumns: [employeeProfiles.id],
+    name: "day_rec_emp_fk",
   }),
 }));
+
+// Relations
+export const shiftsRelations = relations(shifts, ({ one }) => ({
+  employee: one(employeeProfiles, {
+    fields: [shifts.employeeProfileId],
+    references: [employeeProfiles.id],
+  }),
+  store: one(stores, {
+    fields: [shifts.storeId],
+    references: [stores.id],
+  }),
+}));
+
+export const financialTransactionsRelations = relations(financialTransactions, ({ one }) => ({
+  employee: one(employeeProfiles, {
+    fields: [financialTransactions.employeeProfileId],
+    references: [employeeProfiles.id],
+  }),
+  store: one(stores, {
+    fields: [financialTransactions.storeId],
+    references: [stores.id],
+  }),
+}));
+
+export const recurringExpensesRelations = relations(recurringExpenses, ({ one }) => ({
+  employee: one(employeeProfiles, {
+    fields: [recurringExpenses.employeeProfileId],
+    references: [employeeProfiles.id],
+  }),
+  store: one(stores, {
+    fields: [recurringExpenses.storeId],
+    references: [stores.id],
+  }),
+}));
+
+export const dailyReconciliationsRelations = relations(dailyReconciliations, ({ one }) => ({
+  employee: one(employeeProfiles, {
+    fields: [dailyReconciliations.employeeProfileId],
+    references: [employeeProfiles.id],
+  }),
+  store: one(stores, {
+    fields: [dailyReconciliations.storeId],
+    references: [stores.id],
+  }),
+}));
+

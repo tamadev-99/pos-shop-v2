@@ -28,8 +28,9 @@ import { useAuth } from "@/components/providers/auth-provider";
 
 interface ShiftData {
   id: string;
-  cashierId: string;
-  cashier?: { name: string } | null;
+  storeId: string;
+  employeeProfileId: string;
+  employee?: { name: string } | null;
   openedAt: Date;
   closedAt: Date | null;
   openingBalance: number;
@@ -52,7 +53,7 @@ interface Props {
 }
 
 export default function ShiftClient({ initialActiveShifts, initialShiftHistory, totalShifts, users }: Props) {
-  const { user } = useAuth();
+  const { user, activeEmployeeName, activeEmployeeProfileId } = useAuth();
 
   const [openShiftDialog, setOpenShiftDialog] = useState(false);
   const [closeShiftDialog, setCloseShiftDialog] = useState(false);
@@ -80,7 +81,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
     try {
       const nextPage = currentPage + 1;
       const result = await getShiftHistory(nextPage, 20);
-      setShiftHistory((prev) => [...prev, ...result.data]);
+      setShiftHistory((prev) => [...prev, ...(result.data as ShiftData[])]);
       setCurrentPage(nextPage);
     } catch {
       toast.error("Gagal memuat data shift");
@@ -91,9 +92,9 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
 
   const [isPending, startTransition] = useTransition();
 
-  // Find shift for current user. Fallback to first if user not loaded yet to prevent UI shift if they are the only one.
-  const activeShift = user
-    ? initialActiveShifts.find((s) => s.cashierId === user.id)
+  // Find shift for current user (profile-based)
+  const activeShift = activeEmployeeProfileId && initialActiveShifts.length > 0
+    ? initialActiveShifts.find((s) => s.employeeProfileId === activeEmployeeProfileId)
     : initialActiveShifts[0];
 
   const estimatedCashIn = activeShift?.totalCashSales || 0;
@@ -117,10 +118,9 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
 
   const handleOpenShift = (e: React.FormEvent) => {
     e.preventDefault();
-    const cashierId = user?.id;
-    if (!cashierId || !openingBalanceInput) return;
+    if (!activeEmployeeProfileId || !openingBalanceInput) return;
     startTransition(async () => {
-      const res = await openShift(cashierId, Number(openingBalanceInput));
+      const res = await openShift(Number(openingBalanceInput));
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -231,7 +231,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
               <p className="text-xs text-muted-foreground mt-1">
                 Kasir:{" "}
                 <span className="text-foreground font-medium">
-                  {activeShift.cashier?.name || "Kasir"}
+                  {activeShift.employee?.name || "Kasir"}
                 </span>
               </p>
               <div className="flex flex-wrap gap-4 mt-2">
@@ -365,7 +365,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
             </p>
             <p className="text-lg md:text-xl font-bold font-num text-foreground">
               {formatNumber(
-                new Set(shiftHistory.map((s) => s.cashierId)).size
+                new Set(shiftHistory.map((s) => s.employeeProfileId)).size
               )}
             </p>
           </div>
@@ -427,7 +427,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
                         <User size={12} className="text-muted-dim" />
                       </div>
                       <span className="text-xs font-medium text-foreground">
-                        {shift.cashier?.name}
+                        {shift.employee?.name || "Sistem"}
                       </span>
                     </div>
                   </td>
@@ -508,7 +508,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
             <label className="text-xs font-medium text-muted-foreground">
               Kasir
             </label>
-            <Input disabled value={user?.name || "Memuat..."} />
+            <Input disabled value={activeEmployeeName || user?.name || "Memuat..."} />
             <p className="text-[10px] text-muted-dim">
               Shift akan dibuka untuk akun Anda saat ini
             </p>
@@ -586,7 +586,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
                     Kasir
                   </p>
                   <p className="text-xs font-medium text-foreground mt-0.5">
-                    {activeShift.cashier?.name}
+                    {activeShift.employee?.name}
                   </p>
                 </div>
                 <div>

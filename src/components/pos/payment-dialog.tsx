@@ -39,21 +39,6 @@ const paymentMethodLabels: Record<string, string> = {
   ewallet: "E-Wallet",
 };
 
-interface ReceiptData {
-  items: { name: string; qty: number; price: number }[];
-  customerName: string;
-  subtotal: number;
-  discountAmount: number;
-  tax: number;
-  shippingFee: number;
-  total: number;
-  paymentMethod: string;
-  storeName: string;
-  storeAddress: string;
-  storePhone: string;
-  receiptHeader: string;
-  receiptFooter: string;
-}
 
 // Split payment entry
 interface SplitEntry {

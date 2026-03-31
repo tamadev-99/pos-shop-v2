@@ -2,12 +2,14 @@
 
 import { db } from "@/db";
 import { purchaseOrders, purchaseOrderTimeline, financialTransactions } from "@/db/schema";
-import { eq, ne, desc } from "drizzle-orm";
+import { eq, ne, desc, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
 
 export async function getPayables() {
+    const storeId = await getActiveStoreId();
     const list = await db.query.purchaseOrders.findMany({
-        where: ne(purchaseOrders.paymentStatus, "lunas"),
+        where: and(ne(purchaseOrders.paymentStatus, "lunas"), eq(purchaseOrders.storeId, storeId)),
         with: {
             supplier: true,
         },
@@ -35,8 +37,10 @@ export async function getPayablesSummary() {
 }
 
 export async function recordPayment(poId: string, amount: number, note?: string) {
+    const { storeId, employeeProfileId } = await getStoreContext();
+
     const po = await db.query.purchaseOrders.findFirst({
-        where: eq(purchaseOrders.id, poId),
+        where: and(eq(purchaseOrders.id, poId), eq(purchaseOrders.storeId, storeId)),
     });
 
     if (!po) throw new Error("PO tidak ditemukan");
@@ -58,21 +62,22 @@ export async function recordPayment(poId: string, amount: number, note?: string)
         status: "Pembayaran",
         note: note || `Pembayaran sebesar Rp ${amount.toLocaleString()}`,
         date: today,
+        storeId,
     });
 
-    // Record in financial transactions as money out
     await db.insert(financialTransactions).values({
         date: today,
         type: "keluar",
         category: "Pembayaran Hutang",
         description: `Pembelian PO ${poId}`,
         amount: amount,
-        orderId: poId, // reuse orderId for PO id reference
+        orderId: poId,
+        storeId,
+        employeeProfileId: employeeProfileId || null,
     });
 
     revalidatePath("/laporan");
     revalidatePath("/pembelian");
-    revalidatePath("/keuangan");
 
     return { success: true };
 }

@@ -5,10 +5,12 @@ import { suppliers, supplierCategories } from "@/db/schema";
 import { eq, like, and, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getCurrentUser } from "@/lib/actions/auth-helpers";
+import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
 
 export async function getSuppliers(filters?: { search?: string; status?: string }) {
-  const conditions = [];
+  const storeId = await getActiveStoreId();
+  const conditions = [eq(suppliers.storeId, storeId)];
+
   if (filters?.search) {
     conditions.push(like(suppliers.name, `%${filters.search}%`));
   }
@@ -19,10 +21,9 @@ export async function getSuppliers(filters?: { search?: string; status?: string 
   const result = await db
     .select()
     .from(suppliers)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(suppliers.createdAt));
 
-  // Get categories for each supplier
   const suppliersWithCategories = await Promise.all(
     result.map(async (supplier) => {
       const cats = await db.query.supplierCategories.findMany({
@@ -40,8 +41,9 @@ export async function getSuppliers(filters?: { search?: string; status?: string 
 }
 
 export async function getSupplierById(id: string) {
+  const storeId = await getActiveStoreId();
   const supplier = await db.query.suppliers.findFirst({
-    where: eq(suppliers.id, id),
+    where: and(eq(suppliers.id, id), eq(suppliers.storeId, storeId)),
   });
 
   if (!supplier) return null;
@@ -65,6 +67,7 @@ export async function createSupplier(data: {
   address?: string;
   categoryIds?: string[];
 }) {
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
   const id = crypto.randomUUID();
   const today = new Date().toISOString().split("T")[0];
 
@@ -76,6 +79,7 @@ export async function createSupplier(data: {
     email: data.email || "",
     address: data.address || "",
     joinDate: today,
+    storeId,
   });
 
   if (data.categoryIds && data.categoryIds.length > 0) {
@@ -87,18 +91,16 @@ export async function createSupplier(data: {
     );
   }
 
-  const user = await getCurrentUser();
-  if (user) {
-    createAuditLog({
-      userId: user.id,
-      userName: user.name || "Unknown",
-      action: "supplier",
-      detail: `Supplier baru ditambahkan: ${data.name}`,
-      metadata: { supplierId: id, name: data.name },
-    }).catch(() => {});
-  }
+  createAuditLog({
+    userName,
+    action: "supplier",
+    detail: `Supplier baru ditambahkan: ${data.name}`,
+    metadata: { supplierId: id, name: data.name },
+    storeId,
+    employeeProfileId,
+  }).catch(() => {});
 
-  revalidatePath("/supplier");
+  revalidatePath("/kontak");
   return id;
 }
 
@@ -113,18 +115,20 @@ export async function updateSupplier(
     status: "aktif" | "nonaktif";
   }>
 ) {
-  await db.update(suppliers).set(data).where(eq(suppliers.id, id));
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  await db
+    .update(suppliers)
+    .set(data)
+    .where(and(eq(suppliers.id, id), eq(suppliers.storeId, storeId)));
 
-  const user = await getCurrentUser();
-  if (user) {
-    createAuditLog({
-      userId: user.id,
-      userName: user.name || "Unknown",
-      action: "supplier",
-      detail: `Data supplier diperbarui`,
-      metadata: { supplierId: id, changes: data },
-    }).catch(() => {});
-  }
+  createAuditLog({
+    userName,
+    action: "supplier",
+    detail: `Data supplier diperbarui`,
+    metadata: { supplierId: id, changes: data },
+    storeId,
+    employeeProfileId,
+  }).catch(() => {});
 
-  revalidatePath("/supplier");
+  revalidatePath("/kontak");
 }

@@ -29,43 +29,58 @@ import {
   Sparkles,
   Sun,
   Moon,
+  ArrowLeftRight,
+  UserRoundCog,
+  Store,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { clearEmployeeSession, switchStore } from "@/app/select-employee/actions";
 
 const navItems = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard, group: "main" },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, group: "main" },
   { label: "Kasir", href: "/pos", icon: Monitor, group: "main" },
   { label: "Pesanan & Retur", href: "/pesanan", icon: ShoppingCart, group: "main" },
   { label: "Katalog & Stok", href: "/produk", icon: Package, group: "inventory" },
   { label: "Pembelian & Pemasok", href: "/pembelian", icon: Truck, group: "inventory" },
-  { label: "Member & Karyawan", href: "/kontak", icon: Users, group: "people" },
+  { label: "Member", href: "/kontak", icon: Users, group: "people" },
   { label: "Promosi", href: "/promosi", icon: TicketPercent, group: "people" },
+  { label: "Karyawan", href: "/karyawan", icon: UserRoundCog, group: "people" },
   { label: "Laporan & Keuangan", href: "/laporan", icon: BarChart3, group: "system" },
   { label: "Shift", href: "/shift", icon: Clock, group: "system" },
   { label: "Audit", href: "/audit", icon: ClipboardCheck, group: "system" },
   { label: "Notifikasi", href: "/notifikasi", icon: Bell, group: "system" },
   { label: "Pengaturan", href: "/pengaturan", icon: Settings, group: "system" },
+  
+  // Platform Admin
+  { label: "Performa Platform", href: "/admin/platform", icon: BarChart3, group: "platform" },
+  { label: "Data Tenant", href: "/admin/tenants", icon: Users, group: "platform" },
 ];
 
 const groupLabels: Record<string, string> = {
   main: "Menu Utama",
   inventory: "Inventaris",
   people: "Orang",
-  system: "Sistem",
+  system: "Sistem & Pengaturan",
+  platform: "Platform Admin",
 };
 
 const roleLabels: Record<string, string> = {
   cashier: "Kasir",
   manager: "Manajer",
+  admin: "Admin",
   owner: "Owner",
 };
 
-export function Sidebar() {
+interface SidebarProps {
+  customPermissions?: Record<string, string[]>;
+}
+
+export function Sidebar({ customPermissions }: SidebarProps = {}) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, activeEmployeeName, activeEmployeeRole, activeEmployeeProfileId, activeStoreId } = useAuth();
 
   // Start polling notifications
   usePollingNotifications();
@@ -75,25 +90,23 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
-  const userRole = (user?.role || "cashier") as Role;
+  const userRole = (activeEmployeeRole || user?.role || "cashier") as Role;
+  const displayName = activeEmployeeName || user?.name || "User";
+  const displayRole = activeEmployeeRole || user?.role || "cashier";
 
-  const filteredNavItems = navItems.filter((item) =>
-    hasAccess(userRole, item.href)
-  );
-
-  const groupedItems: Record<string, typeof navItems> = {};
-  filteredNavItems.forEach((item) => {
-    if (!groupedItems[item.group]) groupedItems[item.group] = [];
-    groupedItems[item.group].push(item);
+  const groupedNavItems: Record<string, typeof navItems> = {};
+  navItems.forEach((item) => {
+    if (!groupedNavItems[item.group]) groupedNavItems[item.group] = [];
+    groupedNavItems[item.group].push(item);
   });
 
   useEffect(() => {
     setMobileOpen(false);
     if (user?.id) {
-      getNotifications(user.id).then((notifs) => {
+      getNotifications().then((notifs) => {
         const unread = notifs.filter((n) => !n.isRead).length;
         setUnreadNotifCount(unread);
-      });
+      }).catch(() => { });
     }
   }, [pathname, user?.id]);
 
@@ -105,15 +118,28 @@ export function Sidebar() {
   const handleLogout = async () => {
     if (user) {
       createAuditLog({
-        userId: user.id,
-        userName: user.name || "Unknown",
+        employeeProfileId: activeEmployeeProfileId,
+        storeId: activeStoreId || "system",
+        userName: displayName,
         action: "logout",
-        detail: `${user.name || user.email} logout`,
+        detail: `${displayName} logout`,
         metadata: { email: user.email },
-      }).catch(() => {});
+      }).catch(() => { });
     }
     await authClient.signOut();
     window.location.href = "/login";
+  };
+
+  const handleSwitchEmployee = async () => {
+    await clearEmployeeSession();
+    router.push("/select-employee");
+    router.refresh();
+  };
+
+  const handleSwitchStore = async () => {
+    await switchStore();
+    router.push("/select-store");
+    router.refresh();
   };
 
   const isActive = (href: string) =>
@@ -148,81 +174,111 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 py-2 px-2.5 overflow-y-auto space-y-4">
-        {Object.entries(groupedItems).map(([group, items]) => (
-          <div key={group}>
-            {(!collapsed || mobileOpen) && (
-              <p className="px-3 mb-1.5 text-[10px] font-semibold tracking-[0.12em] uppercase text-muted-foreground/50">
-                {groupLabels[group]}
-              </p>
-            )}
-            {collapsed && !mobileOpen && (
-              <div className="w-6 h-px bg-border mx-auto mb-2" />
-            )}
+        {Object.entries(groupedNavItems).map(([group, items]) => {
+          const visibleItems = items.filter((item) => {
+            if (item.href === "/" && !user) return false;
+            return hasAccess(userRole, item.href, customPermissions);
+          });
 
-            <div className="space-y-0.5">
-              {items.map((item) => {
-                const active = isActive(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] transition-all duration-200",
-                      active
-                        ? "font-semibold text-accent bg-accent-muted border border-accent/15"
-                        : "font-medium text-muted-foreground hover:text-foreground hover:bg-surface",
-                      collapsed && !mobileOpen && "lg:justify-center lg:px-0"
-                    )}
-                  >
-                    {active && (
-                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-accent" />
-                    )}
-                    <item.icon
-                      size={18}
+          if (visibleItems.length === 0) return null;
+
+          return (
+            <div key={group}>
+              {(!collapsed || mobileOpen) && (
+                <p className="px-3 mb-1.5 text-[10px] font-semibold tracking-[0.12em] uppercase text-muted-foreground/50">
+                  {groupLabels[group]}
+                </p>
+              )}
+              {collapsed && !mobileOpen && (
+                <div className="w-6 h-px bg-border mx-auto mb-2" />
+              )}
+              <div className="space-y-0.5">
+                {visibleItems.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
                       className={cn(
-                        "shrink-0 transition-colors duration-200",
-                        active ? "text-accent" : "group-hover:text-foreground"
+                        "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] transition-all duration-200",
+                        active
+                          ? "font-semibold text-accent bg-accent-muted border border-accent/15"
+                          : "font-medium text-muted-foreground hover:text-foreground hover:bg-surface",
+                        collapsed && !mobileOpen && "lg:justify-center lg:px-0"
                       )}
-                    />
-                    {item.href === "/notifikasi" && unreadNotifCount > 0 && (
-                      <span className="absolute left-[22px] top-[6px] w-2 h-2 rounded-full bg-destructive ring-2 ring-card-solid" />
-                    )}
-                    {(!collapsed || mobileOpen) && <span className="truncate">{item.label}</span>}
-                    {(!collapsed || mobileOpen) && item.href === "/notifikasi" && unreadNotifCount > 0 && (
-                      <span className="ml-auto flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-destructive-muted text-destructive text-[10px] font-bold border border-destructive/20">
-                        {unreadNotifCount}
-                      </span>
-                    )}
-                    {collapsed && !mobileOpen && (
-                      <span className="absolute left-full ml-3 px-2.5 py-1 rounded-lg bg-card-solid text-foreground text-xs font-medium whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 shadow-[var(--shadow-lg)] border border-border z-50">
-                        {item.label}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
+                    >
+                      {active && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-accent" />
+                      )}
+                      <item.icon
+                        size={18}
+                        className={cn(
+                          "shrink-0 transition-colors duration-200",
+                          active ? "text-accent" : "group-hover:text-foreground"
+                        )}
+                      />
+                      {item.href === "/notifikasi" && unreadNotifCount > 0 && (
+                        <span className="absolute left-[22px] top-[6px] w-2 h-2 rounded-full bg-destructive ring-2 ring-card-solid" />
+                      )}
+                      {(!collapsed || mobileOpen) && <span className="truncate">{item.label}</span>}
+                      {(!collapsed || mobileOpen) && item.href === "/notifikasi" && unreadNotifCount > 0 && (
+                        <span className="ml-auto flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-destructive-muted text-destructive text-[10px] font-bold border border-destructive/20">
+                          {unreadNotifCount}
+                        </span>
+                      )}
+                      {collapsed && !mobileOpen && (
+                        <span className="absolute left-full ml-3 px-2.5 py-1 rounded-lg bg-card-solid text-foreground text-xs font-medium whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 shadow-[var(--shadow-lg)] border border-border z-50">
+                          {item.label}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* Footer */}
       <div className="p-2.5 space-y-1 border-t border-border">
-        {/* User card */}
+        {/* Active employee card */}
         {user && (!collapsed || mobileOpen) && (
-          <div className="flex items-center gap-3 px-3 py-2.5 mb-1 rounded-xl bg-surface border border-border transition-colors cursor-pointer">
+          <div className="flex items-center gap-3 px-3 py-2.5 mb-1 rounded-xl bg-surface border border-border transition-colors">
             <div className="w-8 h-8 rounded-lg bg-accent-muted flex items-center justify-center shrink-0 border border-accent/10">
               <User size={14} className="text-accent" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-semibold text-foreground truncate leading-tight">
-                {user.name}
+                {displayName}
               </p>
               <p className="text-[10px] uppercase tracking-wider font-semibold text-accent/70">
-                {roleLabels[user.role] || user.role}
+                {roleLabels[displayRole] || displayRole}
               </p>
             </div>
           </div>
+        )}
+
+        {/* Switch Employee */}
+        {(!collapsed || mobileOpen) && (
+          <button
+            onClick={handleSwitchEmployee}
+            className="flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-all duration-200 w-full cursor-pointer"
+          >
+            <ArrowLeftRight size={16} className="shrink-0" />
+            <span>Ganti Karyawan</span>
+          </button>
+        )}
+
+        {/* Switch Store */}
+        {(!collapsed || mobileOpen) && (
+          <button
+            onClick={handleSwitchStore}
+            className="flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-all duration-200 w-full cursor-pointer"
+          >
+            <Store size={16} className="shrink-0" />
+            <span>Ganti Toko</span>
+          </button>
         )}
 
         {/* Theme toggle */}

@@ -162,9 +162,21 @@ export function CartPanel({
                 <p className="text-[10px] text-muted-dim">
                   {item.color} • {item.size}
                 </p>
-                <p className="text-[11px] font-num font-semibold text-accent">
-                  {formatRupiah(item.price)}
-                </p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <p className="text-[11px] font-num font-semibold text-accent">
+                    {formatRupiah(item.price)}
+                  </p>
+                  {item.originalPrice !== undefined && item.originalPrice > item.price && (
+                    <>
+                      <span className="text-[9px] text-muted-dim line-through decoration-muted-dim/50 font-num">
+                        {formatRupiah(item.originalPrice)}
+                      </span>
+                      <span className="text-[8px] font-bold text-amber-500 bg-amber-500/10 px-1 py-0.5 rounded uppercase tracking-wider">
+                        Grosir
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-1">
                 <button

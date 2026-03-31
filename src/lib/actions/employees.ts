@@ -4,8 +4,15 @@ import { db } from "@/db";
 import { users, sessions, accounts } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireRole, getCurrentUser } from "@/lib/actions/auth-helpers";
+import { requireRole } from "@/lib/actions/auth-helpers";
 import { createAuditLog } from "@/lib/actions/audit";
+import { getStoreContext } from "@/lib/actions/store-context";
+
+/**
+ * NOTE: This file manages auth-level users (Better-Auth `users` table).
+ * In the SaaS multi-tenant model, employee profiles per store will be
+ * managed separately. This file will be refactored in Phase 3.
+ */
 
 export async function getEmployees() {
     await requireRole("cashier", "manager", "owner");
@@ -13,18 +20,20 @@ export async function getEmployees() {
 }
 
 export async function updateEmployeeRole(id: string, role: "owner" | "manager" | "cashier") {
-    const user = await requireRole("owner");
+    await requireRole("owner");
+    const { storeId, employeeProfileId, userName } = await getStoreContext();
     await db.update(users).set({ role }).where(eq(users.id, id));
 
-    createAuditLog({
-        userId: user.id,
-        userName: user.name || "Unknown",
+    await createAuditLog({
+      userName,
         action: "sistem",
         detail: `Role karyawan diubah ke ${role}`,
         metadata: { employeeId: id, newRole: role },
+        storeId,
+        employeeProfileId,
     }).catch(() => {});
 
-    revalidatePath("/kontak");
+    revalidatePath("/karyawan");
 }
 
 export async function createEmployeeFromOwner(formData: FormData) {
@@ -59,15 +68,16 @@ export async function createEmployeeFromOwner(formData: FormData) {
             const castedRole = role as "owner" | "manager" | "cashier";
             await db.update(users).set({ role: castedRole }).where(eq(users.id, newUser.user.id));
 
-            createAuditLog({
-                userId: ctx.user.id,
+            await createAuditLog({
                 userName: ctx.user.name || "Unknown",
                 action: "sistem",
                 detail: `Karyawan baru ditambahkan: ${name} (${castedRole})`,
                 metadata: { employeeId: newUser.user.id, name, email, role: castedRole },
+                storeId: (ctx.session as unknown as { activeStoreId?: string }).activeStoreId || "",
+                employeeProfileId: (ctx.session as unknown as { activeEmployeeProfileId?: string }).activeEmployeeProfileId || null,
             }).catch(() => {});
 
-            revalidatePath("/kontak");
+            revalidatePath("/karyawan");
             return { success: true, user: { ...newUser.user, role: castedRole } };
         }
         return { error: "Gagal membuat akun" };
@@ -78,71 +88,63 @@ export async function createEmployeeFromOwner(formData: FormData) {
     }
 }
 
-/**
- * Toggle employee banned status. When banning, all sessions are deleted to force logout.
- */
 export async function toggleEmployeeBan(id: string, banned: boolean, reason?: string) {
-    const user = await requireRole("owner");
+    await requireRole("owner");
+    const { storeId, employeeProfileId, userName } = await getStoreContext();
 
     await db.update(users).set({
         banned,
         bannedReason: banned ? (reason || "Dinonaktifkan oleh Owner") : null,
     }).where(eq(users.id, id));
 
-    // If banning, delete all their sessions to force logout
     if (banned) {
         await db.delete(sessions).where(eq(sessions.userId, id));
     }
 
-    createAuditLog({
-        userId: user.id,
-        userName: user.name || "Unknown",
+    await createAuditLog({
+      userName,
         action: "sistem",
         detail: banned ? `Karyawan dinonaktifkan` : `Karyawan diaktifkan kembali`,
         metadata: { employeeId: id, banned, reason },
+        storeId,
+        employeeProfileId,
     }).catch(() => {});
 
-    revalidatePath("/kontak");
-    revalidatePath("/pengaturan");
+    revalidatePath("/karyawan");
     return { success: true };
 }
 
-/**
- * Reset employee password. Uses better-auth's internal password hashing.
- */
 export async function resetEmployeePassword(id: string, newPassword: string) {
-    const user = await requireRole("owner");
+    await requireRole("owner");
+    const { storeId, employeeProfileId, userName } = await getStoreContext();
 
     if (!newPassword || newPassword.length < 8) {
         return { error: "Password minimal 8 karakter" };
     }
 
     try {
-        // Hash the password using better-auth's built-in hashing
         const { hashPassword } = await import("better-auth/crypto");
         const hashedPassword = await hashPassword(newPassword);
 
-        // Update in accounts table (where better-auth stores passwords)
         await db.update(accounts).set({
             password: hashedPassword,
         }).where(eq(accounts.userId, id));
 
-        // Also delete all sessions to force re-login
         await db.delete(sessions).where(eq(sessions.userId, id));
 
-        createAuditLog({
-            userId: user.id,
-            userName: user.name || "Unknown",
+        await createAuditLog({
+            userName,
             action: "sistem",
             detail: `Password karyawan direset`,
             metadata: { employeeId: id },
+            storeId,
+            employeeProfileId,
         }).catch(() => {});
 
-        revalidatePath("/kontak");
+        revalidatePath("/karyawan");
         return { success: true };
     } catch (e: any) {
         console.error("Gagal reset password:", e);
         return { error: e.message || "Gagal mereset password karyawan" };
     }
 }
-

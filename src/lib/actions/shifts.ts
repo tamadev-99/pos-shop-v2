@@ -5,15 +5,17 @@ import { shifts } from "@/db/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getCurrentUser } from "@/lib/actions/auth-helpers";
+import { getStoreContext, getActiveStoreId } from "@/lib/actions/store-context";
 import { processRecurringExpenses } from "@/lib/actions/expense-tracker";
 
-export async function openShift(cashierId: string, openingBalance: number) {
-  // Check if there's already an active shift for this cashier
+export async function openShift(openingBalance: number) {
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
+
+  // Check if there's already an active shift for this store
   const activeShift = await db
     .select()
     .from(shifts)
-    .where(and(eq(shifts.cashierId, cashierId), eq(shifts.status, "active")))
+    .where(and(eq(shifts.storeId, storeId), eq(shifts.status, "active")))
     .limit(1);
 
   if (activeShift.length > 0) {
@@ -23,22 +25,21 @@ export async function openShift(cashierId: string, openingBalance: number) {
   const id = crypto.randomUUID();
   await db.insert(shifts).values({
     id,
-    cashierId,
+    employeeProfileId: employeeProfileId || "",
     openingBalance,
+    storeId,
   });
 
-  const user = await getCurrentUser();
-  if (user) {
-    createAuditLog({
-      userId: user.id,
-      userName: user.name || "Unknown",
-      action: "keuangan",
-      detail: `Shift dibuka dengan saldo awal Rp ${openingBalance.toLocaleString("id-ID")}`,
-      metadata: { shiftId: id, openingBalance },
-    }).catch(() => {});
-  }
+  createAuditLog({
+    userName,
+    action: "keuangan",
+    detail: `Shift dibuka dengan saldo awal Rp ${openingBalance.toLocaleString("id-ID")}`,
+    metadata: { shiftId: id, openingBalance },
+    storeId,
+    employeeProfileId,
+  }).catch(() => {});
 
-  // Process recurring expenses on shift open to ensure they run at least once per business day
+
   processRecurringExpenses().catch(() => {});
 
   revalidatePath("/shift");
@@ -50,10 +51,12 @@ export async function closeShift(
   actualClosing: number,
   notes?: string
 ) {
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
+
   const shift = await db
     .select()
     .from(shifts)
-    .where(eq(shifts.id, id))
+    .where(and(eq(shifts.id, id), eq(shifts.storeId, storeId)))
     .limit(1);
 
   if (!shift[0]) return;
@@ -73,39 +76,43 @@ export async function closeShift(
     })
     .where(eq(shifts.id, id));
 
-  const user = await getCurrentUser();
-  if (user) {
-    createAuditLog({
-      userId: user.id,
-      userName: user.name || "Unknown",
-      action: "keuangan",
-      detail: `Shift ditutup. Selisih: Rp ${difference.toLocaleString("id-ID")}`,
-      metadata: { shiftId: id, actualClosing, expectedClosing, difference },
-    }).catch(() => {});
-  }
+  createAuditLog({
+    userName,
+    action: "keuangan",
+    detail: `Shift ditutup. Selisih: Rp ${difference.toLocaleString("id-ID")}`,
+    metadata: { shiftId: id, actualClosing, expectedClosing, difference },
+    storeId,
+    employeeProfileId,
+  }).catch(() => {});
 
   revalidatePath("/shift");
 }
 
 export async function getActiveShifts() {
+  const storeId = await getActiveStoreId();
   return db.query.shifts.findMany({
-    where: eq(shifts.status, "active"),
-    with: { cashier: true },
+    where: and(eq(shifts.storeId, storeId), eq(shifts.status, "active")),
+    with: { employee: true },
     orderBy: [desc(shifts.openedAt)],
   });
 }
 
-export async function getCurrentShift(cashierId: string) {
+export async function getCurrentShift() {
+  const { storeId, employeeProfileId } = await getStoreContext();
   const activeShift = await db.query.shifts.findFirst({
-    where: and(eq(shifts.cashierId, cashierId), eq(shifts.status, "active")),
-    with: { cashier: true },
+    where: and(
+        eq(shifts.storeId, storeId), 
+        eq(shifts.status, "active"),
+        eq(shifts.employeeProfileId, employeeProfileId || "")
+    ),
+    with: { employee: true },
   });
 
   return activeShift || null;
 }
 
-export async function checkCashierShift(cashierId: string) {
-  const activeShift = await getCurrentShift(cashierId);
+export async function checkCashierShift() {
+  const activeShift = await getCurrentShift();
 
   if (!activeShift) {
     return {
@@ -116,11 +123,8 @@ export async function checkCashierShift(cashierId: string) {
     };
   }
 
-  // Check if it's from a previous day based on local midnight timing
-  // We'll compare the start of today with the openedAt timestamp
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
   const openedAtDate = new Date(activeShift.openedAt);
   const isPreviousDay = openedAtDate < startOfToday;
 
@@ -129,20 +133,26 @@ export async function checkCashierShift(cashierId: string) {
     isPreviousDay,
     shiftId: activeShift.id,
     openedAt: activeShift.openedAt.toISOString(),
+    employeeName: activeShift.employee?.name || "Kasir",
   };
 }
 
 export async function getShiftHistory(page = 1, pageSize = 20) {
+  const storeId = await getActiveStoreId();
   const offset = (page - 1) * pageSize;
 
   const [data, countResult] = await Promise.all([
     db.query.shifts.findMany({
+      where: eq(shifts.storeId, storeId),
       orderBy: [desc(shifts.openedAt)],
       limit: pageSize,
       offset,
-      with: { cashier: true },
+      with: { employee: true },
     }),
-    db.select({ count: sql<number>`count(*)::int` }).from(shifts),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(shifts)
+      .where(eq(shifts.storeId, storeId)),
   ]);
 
   return {
@@ -153,3 +163,4 @@ export async function getShiftHistory(page = 1, pageSize = 20) {
     totalPages: Math.ceil((countResult[0]?.count ?? 0) / pageSize),
   };
 }
+

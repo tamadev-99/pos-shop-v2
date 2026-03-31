@@ -4,15 +4,17 @@ import { db } from "@/db";
 import { auditLogs } from "@/db/schema";
 import { desc, and, eq, gte, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { getActiveStoreId } from "@/lib/actions/store-context";
 
 export async function getAuditLogs(filters?: {
   action?: string;
-  userId?: string;
+  employeeProfileId?: string;
   startDate?: string;
   endDate?: string;
   limit?: number;
 }) {
-  const conditions = [];
+  const storeId = await getActiveStoreId();
+  const conditions = [eq(auditLogs.storeId, storeId)];
 
   if (filters?.action) {
     conditions.push(
@@ -32,8 +34,8 @@ export async function getAuditLogs(filters?: {
       )
     );
   }
-  if (filters?.userId) {
-    conditions.push(eq(auditLogs.userId, filters.userId));
+  if (filters?.employeeProfileId) {
+    conditions.push(eq(auditLogs.employeeProfileId, filters.employeeProfileId));
   }
   if (filters?.startDate) {
     conditions.push(gte(auditLogs.createdAt, new Date(filters.startDate)));
@@ -42,16 +44,17 @@ export async function getAuditLogs(filters?: {
     conditions.push(lte(auditLogs.createdAt, new Date(filters.endDate)));
   }
 
-  return db
-    .select()
-    .from(auditLogs)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(auditLogs.createdAt))
-    .limit(filters?.limit || 100);
+  return db.query.auditLogs.findMany({
+    where: and(...conditions),
+    with: {
+      employee: true,
+    },
+    orderBy: desc(auditLogs.createdAt),
+    limit: filters?.limit || 100,
+  });
 }
 
 export async function createAuditLog(data: {
-  userId?: string;
   userName: string;
   action:
     | "login"
@@ -67,15 +70,22 @@ export async function createAuditLog(data: {
   detail: string;
   metadata?: Record<string, unknown>;
   ipAddress?: string;
+  storeId?: string; // Optional for login/logout (before store is selected)
+  employeeProfileId?: string | null;
 }) {
+  // For login/logout events, storeId may not be available yet
+  const resolvedStoreId = data.storeId || "system";
+
   await db.insert(auditLogs).values({
-    userId: data.userId || null,
     userName: data.userName,
     action: data.action,
     detail: data.detail,
-    metadata: data.metadata || null,
+    metadata: (data.metadata as any) || null,
     ipAddress: data.ipAddress || null,
+    storeId: resolvedStoreId,
+    employeeProfileId: data.employeeProfileId || null,
   });
 
   revalidatePath("/audit");
 }
+

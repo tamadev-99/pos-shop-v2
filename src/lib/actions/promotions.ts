@@ -4,22 +4,27 @@ import { db } from "@/db";
 import { promotions } from "@/db/schema";
 import { eq, and, lte, gte, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireRole, getCurrentUser } from "@/lib/actions/auth-helpers";
+import { requireRole } from "@/lib/actions/auth-helpers";
 import { createAuditLog } from "@/lib/actions/audit";
+import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
 
 export async function getPromotions(filters?: { active?: boolean }) {
+  const storeId = await getActiveStoreId();
+  const conditions = [eq(promotions.storeId, storeId)];
+
   if (filters?.active !== undefined) {
-    return db
-      .select()
-      .from(promotions)
-      .where(eq(promotions.isActive, filters.active))
-      .orderBy(desc(promotions.createdAt));
+    conditions.push(eq(promotions.isActive, filters.active));
   }
 
-  return db.select().from(promotions).orderBy(desc(promotions.createdAt));
+  return db
+    .select()
+    .from(promotions)
+    .where(and(...conditions))
+    .orderBy(desc(promotions.createdAt));
 }
 
 export async function getActivePromotions() {
+  const storeId = await getActiveStoreId();
   const today = new Date().toISOString().split("T")[0];
 
   return db
@@ -27,6 +32,7 @@ export async function getActivePromotions() {
     .from(promotions)
     .where(
       and(
+        eq(promotions.storeId, storeId),
         eq(promotions.isActive, true),
         lte(promotions.startDate, today),
         gte(promotions.endDate, today)
@@ -49,6 +55,7 @@ export async function createPromotion(data: {
   targetIds?: string[];
 }) {
   await requireRole("manager", "owner");
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
   const id = crypto.randomUUID();
 
   await db.insert(promotions).values({
@@ -65,18 +72,17 @@ export async function createPromotion(data: {
     endDate: data.endDate,
     appliesTo: data.appliesTo || "all",
     targetIds: data.targetIds || [],
+    storeId,
   });
 
-  const user = await getCurrentUser();
-  if (user) {
-    createAuditLog({
-      userId: user.id,
-      userName: user.name || "Unknown",
-      action: "sistem",
-      detail: `Promosi baru dibuat: ${data.name}`,
-      metadata: { promotionId: id, name: data.name, type: data.type, value: data.value },
-    }).catch(() => {});
-  }
+  createAuditLog({
+    userName,
+    action: "sistem",
+    detail: `Promosi baru dibuat: ${data.name}`,
+    metadata: { promotionId: id, name: data.name, type: data.type, value: data.value },
+    storeId,
+    employeeProfileId,
+  }).catch(() => {});
 
   revalidatePath("/promosi");
   return id;
@@ -99,30 +105,39 @@ export async function updatePromotion(
     targetIds: string[];
   }>
 ) {
-  const user = await requireRole("manager", "owner");
-  await db.update(promotions).set(data).where(eq(promotions.id, id));
+  await requireRole("manager", "owner");
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  await db
+    .update(promotions)
+    .set(data)
+    .where(and(eq(promotions.id, id), eq(promotions.storeId, storeId)));
 
   createAuditLog({
-    userId: user.id,
-    userName: user.name || "Unknown",
+    userName,
     action: "sistem",
     detail: `Promosi diperbarui`,
     metadata: { promotionId: id, changes: data },
+    storeId,
+    employeeProfileId,
   }).catch(() => {});
 
   revalidatePath("/promosi");
 }
 
 export async function deletePromotion(id: string) {
-  const user = await requireRole("manager", "owner");
-  await db.delete(promotions).where(eq(promotions.id, id));
+  await requireRole("manager", "owner");
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  await db
+    .delete(promotions)
+    .where(and(eq(promotions.id, id), eq(promotions.storeId, storeId)));
 
   createAuditLog({
-    userId: user.id,
-    userName: user.name || "Unknown",
+    userName,
     action: "sistem",
     detail: `Promosi dihapus`,
     metadata: { promotionId: id },
+    storeId,
+    employeeProfileId,
   }).catch(() => {});
 
   revalidatePath("/promosi");

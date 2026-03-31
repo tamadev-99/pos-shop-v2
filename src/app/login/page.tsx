@@ -7,6 +7,7 @@ import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import Link from "next/link";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -29,7 +30,7 @@ export default function LoginPage() {
         toast.error(result.error.message || "Email atau kata sandi salah");
       } else {
         toast.success("Berhasil masuk!");
-        router.push("/");
+        router.push("/select-store");
         router.refresh();
       }
     } catch {
@@ -149,9 +150,12 @@ export default function LoginPage() {
           <div className="mt-6 text-center">
             <span className="text-xs text-muted-foreground">
               Belum punya akun?{" "}
-              <button className="text-accent hover:text-accent-hover font-medium transition-colors cursor-pointer">
-                Hubungi Admin
-              </button>
+              <Link
+                href="/register"
+                className="text-accent hover:text-accent-hover font-medium transition-colors"
+              >
+                Daftar Sekarang
+              </Link>
             </span>
           </div>
         </div>

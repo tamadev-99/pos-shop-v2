@@ -11,8 +11,9 @@ import {
 } from "@/db/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireRole, getCurrentUser } from "@/lib/actions/auth-helpers";
+import { requireRole } from "@/lib/actions/auth-helpers";
 import { createAuditLog } from "@/lib/actions/audit";
+import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
 
 function generatePOId() {
   const now = new Date();
@@ -22,17 +23,20 @@ function generatePOId() {
 }
 
 export async function getPurchaseOrders(filters?: { status?: string }) {
-  const conditions = [];
+  const storeId = await getActiveStoreId();
+  const conditions = [eq(purchaseOrders.storeId, storeId)];
+
   if (filters?.status) {
     conditions.push(eq(purchaseOrders.status, filters.status as "diproses" | "dikirim" | "diterima" | "dibatalkan"));
   }
 
   return db.query.purchaseOrders.findMany({
-    where: conditions.length > 0 ? and(...conditions) : undefined,
+    where: and(...conditions),
     with: {
       supplier: true,
       items: true,
       timeline: true,
+      employee: true,
     },
     orderBy: [desc(purchaseOrders.createdAt)],
   });
@@ -41,6 +45,7 @@ export async function getPurchaseOrders(filters?: { status?: string }) {
 export async function createPurchaseOrder(data: {
   supplierId: string;
   expectedDate?: string;
+  dueDate?: string;
   items: {
     variantId: string;
     productName: string;
@@ -49,9 +54,9 @@ export async function createPurchaseOrder(data: {
     unitCost: number;
   }[];
   notes?: string;
-  createdBy?: string;
 }) {
   await requireRole("manager", "owner");
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
   const poId = generatePOId();
   const today = new Date().toISOString().split("T")[0];
   const total = data.items.reduce((sum, item) => sum + item.unitCost * item.qty, 0);
@@ -61,11 +66,16 @@ export async function createPurchaseOrder(data: {
     supplierId: data.supplierId,
     date: today,
     expectedDate: data.expectedDate || null,
+    dueDate: data.dueDate || null,
     status: "diproses",
     total,
+    paidAmount: 0,
+    paymentStatus: "belum_dibayar",
     notes: data.notes || null,
-    createdBy: data.createdBy || null,
+    employeeProfileId,
+    storeId,
   });
+
 
   await db.insert(purchaseOrderItems).values(
     data.items.map((item) => ({
@@ -76,6 +86,7 @@ export async function createPurchaseOrder(data: {
       qty: item.qty,
       unitCost: item.unitCost,
       subtotal: item.unitCost * item.qty,
+      storeId,
     }))
   );
 
@@ -84,9 +95,9 @@ export async function createPurchaseOrder(data: {
     status: "Dibuat",
     note: "Purchase order dibuat",
     date: today,
+    storeId,
   });
 
-  // Update supplier stats
   await db
     .update(suppliers)
     .set({
@@ -95,16 +106,14 @@ export async function createPurchaseOrder(data: {
     })
     .where(eq(suppliers.id, data.supplierId));
 
-  const user = await getCurrentUser();
-  if (user) {
-    createAuditLog({
-      userId: user.id,
-      userName: user.name || "Unknown",
-      action: "keuangan",
-      detail: `Purchase order dibuat: ${poId}`,
-      metadata: { poId, supplierId: data.supplierId, total, itemCount: data.items.length },
-    }).catch(() => {});
-  }
+  createAuditLog({
+    userName,
+    action: "keuangan",
+    detail: `Purchase order dibuat: ${poId}`,
+    metadata: { poId, supplierId: data.supplierId, total, itemCount: data.items.length },
+    storeId,
+    employeeProfileId,
+  }).catch(() => {});
 
   revalidatePath("/pembelian");
   return poId;
@@ -115,6 +124,7 @@ export async function updatePOStatus(
   status: "diproses" | "dikirim" | "diterima" | "dibatalkan",
   note?: string
 ) {
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
   const today = new Date().toISOString().split("T")[0];
 
   await db
@@ -123,19 +133,19 @@ export async function updatePOStatus(
       status,
       ...(status === "diterima" ? { receivedDate: today } : {}),
     })
-    .where(eq(purchaseOrders.id, id));
+    .where(and(eq(purchaseOrders.id, id), eq(purchaseOrders.storeId, storeId)));
 
   await db.insert(purchaseOrderTimeline).values({
     purchaseOrderId: id,
     status: status.charAt(0).toUpperCase() + status.slice(1),
     note: note || `Status diubah ke ${status}`,
     date: today,
+    storeId,
   });
 
-  // If received, increase stock
   if (status === "diterima") {
     const po = await db.query.purchaseOrders.findFirst({
-      where: eq(purchaseOrders.id, id),
+      where: and(eq(purchaseOrders.id, id), eq(purchaseOrders.storeId, storeId)),
       with: { items: true },
     });
 
@@ -151,18 +161,16 @@ export async function updatePOStatus(
     }
   }
 
-  const user = await getCurrentUser();
-  if (user) {
-    createAuditLog({
-      userId: user.id,
-      userName: user.name || "Unknown",
-      action: "keuangan",
-      detail: `Status PO ${id} diubah ke ${status}`,
-      metadata: { poId: id, status, note },
-    }).catch(() => {});
-  }
+  createAuditLog({
+    userName,
+    action: "keuangan",
+    detail: `Status PO ${id} diubah ke ${status}`,
+    metadata: { poId: id, status, note },
+    storeId,
+    employeeProfileId,
+  }).catch(() => {});
 
   revalidatePath("/pembelian");
-  revalidatePath("/inventaris");
-  revalidatePath("/keuangan");
+  revalidatePath("/produk");
+  revalidatePath("/laporan");
 }

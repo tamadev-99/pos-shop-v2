@@ -44,11 +44,11 @@ interface DBOrder {
   changeAmount: number | null;
   bankName: string | null;
   referenceNumber: string | null;
-  cashierId: string | null;
   shiftId: string | null;
   notes: string | null;
   createdAt: Date;
   items: DBOrderItem[];
+  employee?: { name: string; role: string } | null;
 }
 
 interface Order {
@@ -68,6 +68,7 @@ interface Order {
   bankName: string | null;
   referenceNumber: string | null;
   notes: string | null;
+  cashierName: string;
 }
 
 const paymentMethodLabels: Record<string, string> = {
@@ -107,6 +108,7 @@ function mapDBOrderToOrder(dbOrder: DBOrder): Order {
     bankName: dbOrder.bankName,
     referenceNumber: dbOrder.referenceNumber,
     notes: dbOrder.notes,
+    cashierName: dbOrder.employee?.name || "Sistem",
   };
 }
 
@@ -218,8 +220,9 @@ export default function PesananClient({ initialOrders, initialReturns, totalOrde
       storeName: storeSettings.storeName || "Toko POS",
       storeAddress: storeSettings.storeAddress || "",
       storePhone: storeSettings.storePhone || "",
-      receiptHeader: storeSettings.receiptHeader || "Terima Kasih",
       receiptFooter: storeSettings.receiptFooter || "Barang yang sudah dibeli tidak dapat ditukar/dikembalikan",
+      receiptLogo: storeSettings.receiptLogo,
+      receiptLogoImage: storeSettings.receiptLogoImage,
     };
 
     const printerConfig = {
@@ -234,7 +237,7 @@ export default function PesananClient({ initialOrders, initialReturns, totalOrde
     }
 
     try {
-      const commands = buildReceiptCommands(receiptData, printerConfig.paperWidth);
+      const commands = await buildReceiptCommands(receiptData, printerConfig.paperWidth);
       await printReceipt(commands, printerConfig as PrinterConfig);
       toast.success("Struk berhasil dicetak!");
     } catch (err) {
@@ -451,6 +454,12 @@ export default function PesananClient({ initialOrders, initialReturns, totalOrde
                           {statusLabel[selectedOrder.status]}
                         </Badge>
                       </div>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-muted-dim uppercase tracking-wider">Kasir</p>
+                      <p className="text-xs font-medium text-foreground mt-0.5">
+                        {selectedOrder.cashierName}
+                      </p>
                     </div>
                   </div>
 

@@ -1,9 +1,11 @@
+import { enforceRouteAccess } from '@/lib/actions/permissions';
 import { getPurchaseOrders } from "@/lib/actions/purchases";
 import { getSuppliers } from "@/lib/actions/suppliers";
 import { getAllVariantsFlat, getCategories } from "@/lib/actions/products";
 import PembelianClient from "./pembelian-client";
 
 export default async function PembelianPage() {
+  await enforceRouteAccess('/pembelian');
   const [purchaseOrders, suppliers, products, categories] = await Promise.all([
     getPurchaseOrders(),
     getSuppliers(),

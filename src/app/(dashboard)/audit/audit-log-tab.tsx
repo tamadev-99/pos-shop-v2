@@ -56,6 +56,7 @@ interface AuditEntry {
   metadata: Record<string, unknown> | null;
   ipAddress: string | null;
   createdAt: Date;
+  employee?: { name: string } | null;
 }
 
 export interface AuditLogTabProps {
@@ -150,7 +151,7 @@ export function AuditLogTab({ auditLogs }: AuditLogTabProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Build user filter options from actual data
-  const uniqueUsers = Array.from(new Set(auditLogs.map((e) => e.userName))).sort();
+  const uniqueUsers = Array.from(new Set(auditLogs.map((e) => e.employee?.name || e.userName))).sort();
   const userFilter = [
     { label: "Semua Pengguna", value: "all" },
     ...uniqueUsers.map((name) => ({ label: name, value: name })),
@@ -169,7 +170,7 @@ export function AuditLogTab({ auditLogs }: AuditLogTabProps) {
     const q = search.toLowerCase();
     if (q && !(
       entry.detail.toLowerCase().includes(q) ||
-      entry.userName.toLowerCase().includes(q) ||
+      (entry.employee?.name || entry.userName).toLowerCase().includes(q) ||
       entry.id.toLowerCase().includes(q)
     )) return false;
 
@@ -180,7 +181,7 @@ export function AuditLogTab({ auditLogs }: AuditLogTabProps) {
   const totalLogs = auditLogs.length;
   const transaksiCount = auditLogs.filter((e) => e.action === "transaksi").length;
   const changesCount = auditLogs.filter((e) => !["login", "logout", "transaksi"].includes(e.action)).length;
-  const activeUsers = new Set(auditLogs.map((e) => e.userName)).size;
+  const activeUsers = new Set(auditLogs.map((e) => e.employee?.name || e.userName)).size;
 
   return (
     <div className="space-y-4">
@@ -193,7 +194,7 @@ export function AuditLogTab({ auditLogs }: AuditLogTabProps) {
           onClick={() => {
             const data = filtered.map((entry) => ({
               waktu: new Date(entry.createdAt).toLocaleString("id-ID"),
-              pengguna: entry.userName,
+              pengguna: entry.employee?.name || entry.userName,
               aksi: actionConfig[entry.action]?.label || entry.action,
               detail: entry.detail,
               metadata: entry.metadata ? JSON.stringify(entry.metadata) : "",
@@ -339,7 +340,7 @@ export function AuditLogTab({ auditLogs }: AuditLogTabProps) {
                             <div className="w-5 h-5 rounded-full bg-surface flex items-center justify-center">
                               <User size={10} className="text-muted-foreground" />
                             </div>
-                            <span className="text-xs text-foreground font-medium">{entry.userName}</span>
+                            <span className="text-xs text-foreground font-medium">{entry.employee?.name || entry.userName}</span>
                           </div>
                         </div>
                         <div>

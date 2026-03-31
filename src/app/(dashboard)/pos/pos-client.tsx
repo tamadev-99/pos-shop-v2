@@ -55,6 +55,7 @@ interface DBProduct {
     sellPrice: number;
     status: "aktif" | "nonaktif";
     createdAt: Date;
+    wholesaleTiers?: { minQty: number; price: number }[];
   }[];
 }
 
@@ -120,6 +121,7 @@ function mapDBProductToProduct(dbProduct: DBProduct): Product {
       buyPrice: v.buyPrice,
       sellPrice: v.sellPrice,
       status: v.status,
+      wholesaleTiers: v.wholesaleTiers?.map((t) => ({ minQty: t.minQty, price: t.price })) || [],
     })),
   };
 }
@@ -130,7 +132,6 @@ interface StoreSettings {
   storePhone: string;
   taxRate: number;
   taxIncluded: string;
-  receiptHeader: string;
   receiptFooter: string;
   [key: string]: any;
 }
@@ -146,18 +147,18 @@ interface POSClientProps {
 
 export default function POSClient({ initialProducts, customers, promotions, printerConfig, storeSettings, initialHeldTransactions = [] }: POSClientProps) {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, activeEmployeeName, activeEmployeeProfileId } = useAuth();
   const [isPending, startTransition] = useTransition();
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
 
-  // Fetch active shift for current user
+  // Fetch active shift for current employee profile
   useEffect(() => {
-    if (user?.id) {
-      getCurrentShift(user.id).then((shift) => {
+    if (activeEmployeeProfileId) {
+      getCurrentShift().then((shift) => {
         setActiveShiftId(shift?.id || null);
       });
     }
-  }, [user?.id]);
+  }, [activeEmployeeProfileId]);
 
   const products = useMemo(
     () => initialProducts.map(mapDBProductToProduct),
@@ -251,6 +252,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
           color: variant.color,
           size: variant.size,
           price: variant.sellPrice,
+          originalPrice: variant.sellPrice,
           qty: 1,
         },
       ];
@@ -301,8 +303,6 @@ export default function POSClient({ initialProducts, customers, promotions, prin
 
   const clearCart = () => setCart([]);
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-
   const findDBVariant = useCallback(
     (variantId: string) => {
       for (const p of initialProducts) {
@@ -314,6 +314,31 @@ export default function POSClient({ initialProducts, customers, promotions, prin
     [initialProducts]
   );
 
+  // Recalculate cart item prices based on wholesale tiers when quantity updates
+  const cartWithWholesale = useMemo(() => {
+    return cart.map((item) => {
+      const dbData = findDBVariant(item.variantId);
+      if (!dbData) return item;
+
+      const tiers = dbData.variant.wholesaleTiers || [];
+      if (tiers.length === 0) return item;
+
+      // Find the highest minQty tier that the current qty satisfies
+      // Tiers should be sorted naturally, but we can do a descending search/reduce
+      const applicableTier = tiers
+        .filter((t) => item.qty >= t.minQty)
+        .sort((a, b) => b.minQty - a.minQty)[0]; // get the highest requirement satisfied
+
+      if (applicableTier) {
+        return { ...item, price: applicableTier.price };
+      }
+      return { ...item, price: item.originalPrice || item.price };
+    });
+  }, [cart, findDBVariant]);
+
+  const subtotal = cartWithWholesale.reduce((sum, item) => sum + item.price * item.qty, 0);
+
+
   // Discount calculations
   const selectedCustomerData = customers.find((c) => c.id === selectedCustomer);
 
@@ -324,14 +349,14 @@ export default function POSClient({ initialProducts, customers, promotions, prin
     if (subtotal < (promo.minPurchase || 0)) return 0;
 
     // Filter items by appliesTo scope
-    let eligibleItems = cart;
+    let eligibleItems = cartWithWholesale;
     if (promo.appliesTo === "category" && promo.targetIds && promo.targetIds.length > 0) {
-      eligibleItems = cart.filter((item) => {
+      eligibleItems = cartWithWholesale.filter((item) => {
         const dbData = findDBVariant(item.variantId);
         return dbData && promo.targetIds!.includes(dbData.product.categoryId);
       });
     } else if (promo.appliesTo === "product" && promo.targetIds && promo.targetIds.length > 0) {
-      eligibleItems = cart.filter((item) => promo.targetIds!.includes(item.productId));
+      eligibleItems = cartWithWholesale.filter((item) => promo.targetIds!.includes(item.productId));
     }
 
     if (eligibleItems.length === 0) return 0;
@@ -350,7 +375,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
         if (!promo.freeProductId) return 0;
 
         // Find the free product in cart
-        const freeItemInCart = cart.find((item) => item.productId === promo.freeProductId);
+        const freeItemInCart = cartWithWholesale.find((item) => item.productId === promo.freeProductId);
         if (!freeItemInCart) return 0;
 
         // Count eligible items (excluding the free product itself)
@@ -377,7 +402,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
 
   // Auto-apply: pick the best promo automatically
   const autoAppliedPromo = useMemo(() => {
-    if (cart.length === 0 || promotions.length === 0) return null;
+    if (cartWithWholesale.length === 0 || promotions.length === 0) return null;
     let best: Promotion | null = null;
     let bestDisc = 0;
     for (const promo of promotions) {
@@ -427,7 +452,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
   }
   // If 'no', tax is 0 and total is just discountedSubtotal + shippingFee
 
-  const cartItemCount = cart.reduce((sum, i) => sum + i.qty, 0);
+  const cartItemCount = cartWithWholesale.reduce((sum, i) => sum + i.qty, 0);
 
   // Bug Fix #6: Block checkout without active shift
   const tryCheckout = useCallback(() => {
@@ -443,7 +468,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
 
   const handlePaymentConfirm = async (paymentMethod: "tunai" | "debit" | "kredit" | "transfer" | "qris" | "ewallet", cashPaid?: number, changeAmount?: number, splitNote?: string, bankName?: string, referenceNumber?: string) => {
     try {
-      const orderItems = cart.map((item) => {
+      const orderItems = cartWithWholesale.map((item) => {
         const found = findDBVariant(item.variantId);
         return {
           variantId: item.variantId,
@@ -469,7 +494,6 @@ export default function POSClient({ initialProducts, customers, promotions, prin
         referenceNumber: referenceNumber || undefined,
         cashPaid,
         changeAmount,
-        cashierId: user?.id,
         shiftId: activeShiftId || undefined,
         notes: splitNote || undefined,
       });
@@ -483,7 +507,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
 
       // Show receipt
       setReceiptData({
-        items: cart.map((item) => ({
+        items: cartWithWholesale.map((item) => ({
           name: item.name,
           variantInfo: `${item.color} - ${item.size}`,
           qty: item.qty,
@@ -579,7 +603,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
   // Build receipt data for the payment dialog
   const paymentReceiptData = lastOrderId
     ? {
-      items: cart.map((item) => ({ name: `${item.name} (${item.color}/${item.size})`, qty: item.qty, price: item.price })),
+      items: cartWithWholesale.map((item) => ({ name: `${item.name} (${item.color}/${item.size})`, qty: item.qty, price: item.price })),
       customerName: selectedCustomerData?.name || "Pelanggan Umum",
       subtotal,
       discountAmount,
@@ -588,9 +612,8 @@ export default function POSClient({ initialProducts, customers, promotions, prin
       total,
       paymentMethod: "",
       storeName: storeSettings?.storeName || "Toko Fashion",
-      storeAddress: storeSettings?.receiptAddress || storeSettings?.storeAddress || "",
+      storeAddress: storeSettings?.storeAddress || "",
       storePhone: storeSettings?.storePhone || "",
-      receiptHeader: storeSettings?.receiptHeader || storeSettings?.storeName || "Toko Fashion",
       receiptFooter: storeSettings?.receiptFooter || "Terima kasih atas kunjungan Anda!",
     }
     : null;
@@ -665,7 +688,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
       {/* Right — Cart (Desktop) */}
       <div className="hidden lg:block w-[340px] shrink-0">
         <CartPanel
-          items={cart}
+          items={cartWithWholesale}
           onUpdateQty={updateQty}
           onRemove={removeItem}
           onClear={clearCart}
@@ -717,7 +740,7 @@ export default function POSClient({ initialProducts, customers, promotions, prin
         )}
       >
         <CartPanel
-          items={cart}
+          items={cartWithWholesale}
           onUpdateQty={updateQty}
           onRemove={removeItem}
           onClear={clearCart}
@@ -858,16 +881,17 @@ export default function POSClient({ initialProducts, customers, promotions, prin
           bankName={receiptData.bankName}
           referenceNumber={receiptData.referenceNumber}
           notes={receiptData.splitNote}
-          cashierName={user?.name || "Kasir"}
+          cashierName={activeEmployeeName || user?.name || "Kasir"}
           storeName={storeSettings?.storeName}
-          storeAddress={storeSettings?.receiptAddress}
+          storeAddress={storeSettings?.storeAddress}
           storePhone={storeSettings?.storePhone}
-          receiptHeader={storeSettings?.receiptHeader}
           receiptFooter={storeSettings?.receiptFooter}
           printerType={storeSettings?.printerType}
           printerTarget={storeSettings?.printerTarget}
           receiptWidth={storeSettings?.receiptWidth}
           taxName={storeSettings?.taxName || "PPN"}
+          receiptLogo={storeSettings?.receiptLogo}
+          receiptLogoImage={storeSettings?.receiptLogoImage}
         />
       )}
     </div>

@@ -22,8 +22,18 @@ export const auth = betterAuth({
     expiresIn: 7 * 24 * 60 * 60,
     updateAge: 24 * 60 * 60,
     cookieCache: {
-      enabled: true,
+      enabled: false,
       maxAge: 5 * 60,
+    },
+    additionalFields: {
+      activeStoreId: {
+        type: "string",
+        required: false,
+      },
+      activeEmployeeProfileId: {
+        type: "string",
+        required: false,
+      },
     },
   },
   user: {
@@ -32,7 +42,6 @@ export const auth = betterAuth({
         type: "string",
         required: false,
         defaultValue: "cashier",
-        input: false,
       },
     },
   },
@@ -49,13 +58,13 @@ export const auth = betterAuth({
 
           if (user[0]) {
             createAuditLog({
-              userId: user[0].id,
               userName: user[0].name || "Unknown",
               action: "login",
               detail: `${user[0].name || user[0].email} berhasil login`,
               metadata: { email: user[0].email },
             }).catch(() => {});
           }
+
         },
       },
     },

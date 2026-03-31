@@ -15,7 +15,7 @@ import {
 import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getCurrentUser } from "@/lib/actions/auth-helpers";
+import { getStoreContext, getActiveStoreId } from "@/lib/actions/store-context";
 import { checkLowStock } from "@/lib/actions/notifications";
 import { recalculateTier } from "@/lib/actions/customers";
 
@@ -42,7 +42,6 @@ export interface CreateOrderParams {
     unitPrice: number;
     costPrice: number;
   }[];
-  cashierId?: string;
   shiftId?: string;
 }
 
@@ -54,20 +53,39 @@ function generateOrderId() {
 }
 
 export async function createOrder(data: CreateOrderParams) {
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
   const orderId = generateOrderId();
   const today = new Date().toISOString().split("T")[0];
 
-  // Bug Fix #7: Validate stock before creating order
+  // Validate stock and wholesale pricing before creating order
   for (const item of data.items) {
-    const variant = await db
-      .select({ stock: productVariants.stock, sku: productVariants.sku })
-      .from(productVariants)
-      .where(eq(productVariants.id, item.variantId))
-      .limit(1);
+    const variant = await db.query.productVariants.findFirst({
+      where: eq(productVariants.id, item.variantId),
+      with: {
+        wholesaleTiers: true,
+      },
+    });
 
-    if (!variant[0] || variant[0].stock < item.qty) {
+    if (!variant || variant.stock < item.qty) {
       throw new Error(
-        `Stok tidak cukup untuk ${item.productName} (${item.variantInfo}). Tersedia: ${variant[0]?.stock ?? 0}, Dibutuhkan: ${item.qty}`
+        `Stok tidak cukup untuk ${item.productName} (${item.variantInfo}). Tersedia: ${variant?.stock ?? 0}, Dibutuhkan: ${item.qty}`
+      );
+    }
+
+    // Server-side strict validation for wholesale tiers (Phase 6 requirement)
+    let expectedPrice = variant.sellPrice;
+    if (variant.wholesaleTiers && variant.wholesaleTiers.length > 0) {
+      const applicableTier = variant.wholesaleTiers
+        .filter((t) => item.qty >= t.minQty)
+        .sort((a, b) => b.minQty - a.minQty)[0];
+      if (applicableTier) {
+        expectedPrice = applicableTier.price;
+      }
+    }
+
+    if (item.unitPrice !== expectedPrice) {
+      throw new Error(
+        `Validasi Harga Gagal: ${item.productName} (${item.variantInfo}) dikirim dengan harga Rp${item.unitPrice}, namun harga valid (dengan kuantitas ${item.qty}) adalah Rp${expectedPrice}.`
       );
     }
   }
@@ -87,7 +105,8 @@ export async function createOrder(data: CreateOrderParams) {
     referenceNumber: data.referenceNumber || null,
     cashPaid: data.cashPaid || null,
     changeAmount: data.changeAmount || null,
-    cashierId: data.cashierId || null,
+    employeeProfileId: employeeProfileId || null,
+    storeId,
     shiftId: data.shiftId || null,
     notes: data.notes || null,
     status: "selesai",
@@ -104,12 +123,12 @@ export async function createOrder(data: CreateOrderParams) {
       unitPrice: item.unitPrice,
       costPrice: item.costPrice,
       subtotal: item.unitPrice * item.qty,
+      storeId,
     }))
   );
 
   // Deduct stock for each variant (bundle-aware)
   for (const item of data.items) {
-    // Check if this variant belongs to a bundle product
     const variantWithProduct = await db.query.productVariants.findFirst({
       where: eq(productVariants.id, item.variantId),
       with: {
@@ -122,7 +141,6 @@ export async function createOrder(data: CreateOrderParams) {
     });
 
     if (variantWithProduct?.product?.isBundle && variantWithProduct.product.bundleItems.length > 0) {
-      // Bundle product: deduct stock from each component variant
       for (const comp of variantWithProduct.product.bundleItems) {
         await db
           .update(productVariants)
@@ -130,7 +148,6 @@ export async function createOrder(data: CreateOrderParams) {
           .where(eq(productVariants.id, comp.componentVariantId));
       }
     } else {
-      // Regular product: deduct stock normally
       await db
         .update(productVariants)
         .set({ stock: sql`${productVariants.stock} - ${item.qty}` })
@@ -138,7 +155,7 @@ export async function createOrder(data: CreateOrderParams) {
     }
   }
 
-  // Update customer spending & points, then recalculate tier
+  // Update customer spending & points
   if (data.customerId) {
     const pointsEarned = Math.floor(data.total / 1000);
     await db
@@ -150,7 +167,6 @@ export async function createOrder(data: CreateOrderParams) {
       })
       .where(eq(customers.id, data.customerId));
 
-    // Auto-upgrade tier based on new totalSpent
     recalculateTier(data.customerId).catch(() => { });
   }
 
@@ -162,7 +178,8 @@ export async function createOrder(data: CreateOrderParams) {
     description: `Penjualan ${orderId}`,
     amount: data.total,
     orderId,
-    createdBy: data.cashierId || null,
+    storeId,
+    employeeProfileId: employeeProfileId || null,
   });
 
   // Update active shift if any
@@ -187,19 +204,19 @@ export async function createOrder(data: CreateOrderParams) {
   revalidatePath("/");
   revalidatePath("/pos");
   revalidatePath("/pesanan");
-  revalidatePath("/inventaris");
-  revalidatePath("/pelanggan");
-  revalidatePath("/keuangan");
+  revalidatePath("/produk");
+  revalidatePath("/kontak");
+  revalidatePath("/laporan");
   revalidatePath("/shift");
 
   // Audit log
-  const currentUser = await getCurrentUser();
   createAuditLog({
-    userId: currentUser?.id,
-    userName: currentUser?.name || data.customerName || "Kasir",
+    userName,
     action: "transaksi",
     detail: `Pesanan baru ${orderId} — ${data.items.length} item, Total ${data.total}`,
     metadata: { orderId, total: data.total, paymentMethod: data.paymentMethod },
+    storeId,
+    employeeProfileId,
   }).catch(() => { });
 
   // Auto-check low stock after sale
@@ -215,7 +232,9 @@ export async function getOrders(filters: {
   limit?: number;
   offset?: number;
 } = {}) {
-  const conditions = [];
+  const storeId = await getActiveStoreId();
+  const conditions = [eq(orders.storeId, storeId)];
+
   if (filters.status) {
     conditions.push(eq(orders.status, filters.status as "pending" | "selesai" | "dibatalkan"));
   }
@@ -226,12 +245,12 @@ export async function getOrders(filters: {
     conditions.push(lte(orders.date, new Date(filters.endDate)));
   }
 
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const whereClause = and(...conditions);
 
   const [data, countResult] = await Promise.all([
     db.query.orders.findMany({
       where: whereClause,
-      with: { items: true },
+      with: { items: true, employee: true },
       orderBy: [desc(orders.createdAt)],
       limit: filters.limit,
       offset: filters.offset,
@@ -249,15 +268,18 @@ export async function getOrders(filters: {
 }
 
 export async function getOrderById(id: string) {
+  const storeId = await getActiveStoreId();
   return db.query.orders.findFirst({
-    where: eq(orders.id, id),
-    with: { items: true },
+    where: and(eq(orders.id, id), eq(orders.storeId, storeId)),
+    with: { items: true, employee: true },
   });
 }
 
 export async function cancelOrder(id: string) {
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
+
   const order = await db.query.orders.findFirst({
-    where: eq(orders.id, id),
+    where: and(eq(orders.id, id), eq(orders.storeId, storeId)),
     with: { items: true },
   });
 
@@ -273,7 +295,7 @@ export async function cancelOrder(id: string) {
     }
   }
 
-  // Bug Fix #1: Reverse shift sales if order was linked to a shift
+  // Reverse shift sales
   if (order.shiftId) {
     const isCash = order.paymentMethod === "tunai";
     await db
@@ -291,7 +313,7 @@ export async function cancelOrder(id: string) {
       .where(eq(shifts.id, order.shiftId));
   }
 
-  // Bug Fix #2: Delete the financial transaction for this order
+  // Delete the financial transaction
   await db
     .delete(financialTransactions)
     .where(eq(financialTransactions.orderId, id));
@@ -300,37 +322,39 @@ export async function cancelOrder(id: string) {
   await db.update(orders).set({ status: "dibatalkan" }).where(eq(orders.id, id));
 
   revalidatePath("/pesanan");
-  revalidatePath("/inventaris");
-  revalidatePath("/keuangan");
+  revalidatePath("/produk");
+  revalidatePath("/laporan");
   revalidatePath("/shift");
 
-  const currentUser2 = await getCurrentUser();
   createAuditLog({
-    userId: currentUser2?.id,
-    userName: currentUser2?.name || "Kasir",
+    userName,
     action: "transaksi",
     detail: `Pesanan ${id} dibatalkan`,
     metadata: { orderId: id },
+    storeId,
+    employeeProfileId,
   }).catch(() => { });
 }
 
 export async function holdTransaction(data: {
-  cashierId?: string;
   customerName?: string;
   customerId?: string;
   items: unknown[];
   shippingFee?: number;
   notes?: string;
 }) {
+  const { storeId, employeeProfileId } = await getStoreContext();
   const id = crypto.randomUUID();
+
   await db.insert(heldTransactions).values({
     id,
-    cashierId: data.cashierId || null,
+    employeeProfileId: employeeProfileId || null,
     customerName: data.customerName || null,
     customerId: data.customerId || null,
     items: data.items,
     shippingFee: data.shippingFee || 0,
     notes: data.notes || null,
+    storeId,
   });
 
   revalidatePath("/pos");
@@ -338,7 +362,12 @@ export async function holdTransaction(data: {
 }
 
 export async function getHeldTransactions() {
-  return db.select().from(heldTransactions).orderBy(desc(heldTransactions.createdAt));
+  const storeId = await getActiveStoreId();
+  return db
+    .select()
+    .from(heldTransactions)
+    .where(eq(heldTransactions.storeId, storeId))
+    .orderBy(desc(heldTransactions.createdAt));
 }
 
 export async function deleteHeldTransaction(id: string) {
@@ -347,8 +376,9 @@ export async function deleteHeldTransaction(id: string) {
 }
 
 export async function getOrdersByCustomerId(customerId: string) {
+  const storeId = await getActiveStoreId();
   return db.query.orders.findMany({
-    where: eq(orders.customerId, customerId),
+    where: and(eq(orders.customerId, customerId), eq(orders.storeId, storeId)),
     with: { items: true },
     orderBy: [desc(orders.createdAt)],
     limit: 20,

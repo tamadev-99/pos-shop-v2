@@ -1,13 +1,16 @@
 import { pgTable, text, integer, timestamp, pgEnum, varchar, boolean } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { stores } from "./auth";
+
 
 export const productStatusEnum = pgEnum("product_status", ["aktif", "nonaktif"]);
 
 export const categories = pgTable("categories", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  name: text("name").notNull().unique(),
-  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
   description: text("description").default(""),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -23,6 +26,7 @@ export const products = pgTable("products", {
   baseCost: integer("base_cost").notNull(),
   isBundle: boolean("is_bundle").notNull().default(false),
   status: productStatusEnum("status").notNull().default("aktif"),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -39,6 +43,7 @@ export const productVariants = pgTable("product_variants", {
   buyPrice: integer("buy_price").notNull(),
   sellPrice: integer("sell_price").notNull(),
   status: productStatusEnum("status").notNull().default("aktif"),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -47,6 +52,14 @@ export const bundleItems = pgTable("bundle_items", {
   bundleId: text("bundle_id").notNull().references(() => products.id, { onDelete: "cascade" }),
   componentVariantId: text("component_variant_id").notNull().references(() => productVariants.id, { onDelete: "restrict" }),
   quantity: integer("quantity").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const productWholesaleTiers = pgTable("product_wholesale_tiers", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  variantId: text("variant_id").notNull().references(() => productVariants.id, { onDelete: "cascade" }),
+  minQty: integer("min_qty").notNull(),
+  price: integer("price").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -70,6 +83,14 @@ export const productVariantsRelations = relations(productVariants, ({ one, many 
     references: [products.id],
   }),
   bundleItems: many(bundleItems),
+  wholesaleTiers: many(productWholesaleTiers),
+}));
+
+export const productWholesaleTiersRelations = relations(productWholesaleTiers, ({ one }) => ({
+  variant: one(productVariants, {
+    fields: [productWholesaleTiers.variantId],
+    references: [productVariants.id],
+  }),
 }));
 
 export const bundleItemsRelations = relations(bundleItems, ({ one }) => ({

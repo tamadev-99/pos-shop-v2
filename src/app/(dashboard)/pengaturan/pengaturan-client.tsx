@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { Save, Store, User, Receipt, Users, Percent, Trash2, Printer, Usb, Wifi, Bluetooth, Loader2, AlertTriangle, CheckCircle, Info, Crown, Plus, X } from "lucide-react";
 import { useState, useTransition } from "react";
-import { updateSetting, updateUserRole } from "@/lib/actions/settings";
+import { updateSetting } from "@/lib/actions/settings";
 import { toast } from "sonner";
 import {
   buildTestPageCommands,
@@ -29,25 +29,15 @@ const settingsTabs = [
   { label: "Member", value: "member" },
   { label: "Struk", value: "struk" },
   { label: "Printer", value: "printer" },
-  { label: "Pengguna", value: "pengguna" },
   { label: "Barcode", value: "barcode" },
 ];
 
-interface UserData {
-  id: string;
-  name: string;
-  email: string;
-  role: string | null;
-  createdAt: Date;
-}
-
 interface Props {
   initialSettings: Record<string, any>;
-  users: UserData[];
   variants: any[];
 }
 
-export default function PengaturanClient({ initialSettings, users, variants }: Props) {
+export default function PengaturanClient({ initialSettings, variants }: Props) {
   const [activeTab, setActiveTab] = useState("toko");
   const [isPending, startTransition] = useTransition();
 
@@ -61,11 +51,11 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
   const [taxRate, setTaxRate] = useState(initialSettings["taxRate"] || "11");
   const [taxIncluded, setTaxIncluded] = useState(initialSettings["taxIncluded"] || "no");
 
-  const [receiptHeader, setReceiptHeader] = useState(initialSettings["receiptHeader"] || "");
-  const [receiptAddress, setReceiptAddress] = useState(initialSettings["receiptAddress"] || "");
   const [receiptFooter, setReceiptFooter] = useState(initialSettings["receiptFooter"] || "Terima kasih atas kunjungan Anda!");
   const [receiptWidth, setReceiptWidth] = useState(initialSettings["receiptWidth"] || "58");
   const [receiptLogo, setReceiptLogo] = useState(initialSettings["receiptLogo"] || "no");
+  const [receiptLogoImage, setReceiptLogoImage] = useState(initialSettings["receiptLogoImage"] || "");
+
 
   const [printerType, setPrinterType] = useState(initialSettings["printerType"] || "usb");
   const [printerTarget, setPrinterTarget] = useState(initialSettings["printerTarget"] || "POS-58 Thermal Printer");
@@ -92,11 +82,19 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
   const handleSaveStore = (e: React.FormEvent) => {
     e.preventDefault();
     startTransition(async () => {
-      await updateSetting("storeName", storeName);
-      await updateSetting("storeAddress", storeAddress);
-      await updateSetting("storePhone", storePhone);
-      await updateSetting("storeEmail", storeEmail);
-      toast.success("Informasi toko berhasil disimpan!");
+      try {
+        await Promise.all([
+          updateSetting("storeName", storeName),
+          updateSetting("storeAddress", storeAddress),
+          updateSetting("storePhone", storePhone),
+          updateSetting("storeEmail", storeEmail),
+          updateSetting("receiptLogo", receiptLogo),
+          updateSetting("receiptLogoImage", receiptLogoImage),
+        ]);
+        toast.success("Informasi toko berhasil disimpan!");
+      } catch (error: any) {
+        toast.error(error.message || "Gagal menyimpan informasi toko");
+      }
     });
   };
 
@@ -114,16 +112,58 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
     e.preventDefault();
     startTransition(async () => {
       try {
-        await updateSetting("receiptHeader", receiptHeader);
-        await updateSetting("receiptAddress", receiptAddress);
         await updateSetting("receiptFooter", receiptFooter);
         await updateSetting("receiptWidth", receiptWidth);
         await updateSetting("receiptLogo", receiptLogo);
+        await updateSetting("receiptLogoImage", receiptLogoImage);
         toast.success("Template struk berhasil disimpan!");
       } catch (error: any) {
         toast.error(error.message || "Gagal menyimpan template struk");
       }
     });
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Ukuran file maksimal 2MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        // Resize for thermal printer (max 384px width for 58mm)
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 384;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          // Fill white background to avoid transparent black dots
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Convert to base64 jpeg
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+          setReceiptLogoImage(dataUrl);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveMemberTiers = (e: React.FormEvent) => {
@@ -240,12 +280,7 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
     }
   };
 
-  const handleChangeRole = (userId: string, newRole: string) => {
-    startTransition(async () => {
-      await updateUserRole(userId, newRole as "cashier" | "manager" | "owner");
-      toast.success("Role pengguna berhasil diubah!");
-    });
-  };
+
 
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-[1400px]">
@@ -307,10 +342,71 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
                     <Input value={storeEmail} onChange={(e) => setStoreEmail(e.target.value)} />
                   </div>
                 </div>
-                <Button type="submit" disabled={isPending}>
-                  <Save size={14} />
-                  Simpan Perubahan
-                </Button>
+
+                <div className="space-y-4 pt-4 border-t border-border mt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-6 h-6 rounded-lg bg-accent/10 flex items-center justify-center">
+                      <Store size={12} className="text-accent" />
+                    </div>
+                    <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Identitas & Logo Struk</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Tampilkan Logo di Struk
+                    </label>
+                    <Select
+                      options={[
+                        { label: "Ya", value: "yes" },
+                        { label: "Tidak", value: "no" },
+                      ]}
+                      value={receiptLogo}
+                      onChange={(e) => setReceiptLogo(e.target.value)}
+                    />
+                  </div>
+
+                  {receiptLogo === "yes" && (
+                    <div className="space-y-1.5 animate-fade-down duration-200">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        Logo Toko <span className="text-[10px] text-muted-dim">(Max 2MB)</span>
+                      </label>
+                      <div className="flex items-center gap-4">
+                        {receiptLogoImage ? (
+                          <div className="relative w-16 h-16 rounded-xl border border-border bg-white flex items-center justify-center overflow-hidden shadow-sm">
+                            <img src={receiptLogoImage} alt="Logo" className="max-w-full max-h-full object-contain p-1" />
+                            <button
+                              type="button"
+                              onClick={() => setReceiptLogoImage("")}
+                              className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors shadow-sm"
+                            >
+                              <X size={10} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="w-16 h-16 rounded-xl border border-dashed border-border bg-muted/30 flex flex-col items-center justify-center gap-1">
+                            <Plus size={16} className="text-muted-dim" />
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <Input 
+                            type="file" 
+                            accept="image/jpeg, image/png, image/webp" 
+                            onChange={handleLogoUpload}
+                            className="text-xs cursor-pointer file:cursor-pointer h-9 py-1"
+                          />
+                          <p className="text-[10px] text-muted-dim mt-1">Gunakan gambar resolusi tinggi dengan latar belakang putih/transparan.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-4">
+                  <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
+                    {isPending ? <Loader2 className="mr-2 animate-spin" size={14} /> : <Save size={14} className="mr-2" />}
+                    Simpan Perubahan
+                  </Button>
+                </div>
               </form>
             </CardContent>
           </Card>
@@ -521,44 +617,31 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
             </CardContent>
           </Card>
         )}
-
         {/* Struk */}
         {activeTab === "struk" && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center shadow-[0_0_12px_-3px_rgba(245,158,11,0.25)]">
-                  <Receipt size={15} className="text-amber-400" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start animate-in fade-in duration-500">
+            <Card className="h-fit">
+              <CardHeader>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center shadow-[0_0_12px_-3px_rgba(245,158,11,0.25)]">
+                    <Receipt size={15} className="text-amber-400" />
+                  </div>
+                  <div>
+                    <CardTitle>Template Struk</CardTitle>
+                    <CardDescription>
+                      Kustomisasi tampilan struk pembayaran Anda
+                    </CardDescription>
+                  </div>
                 </div>
-                <div>
-                  <CardTitle>Template Struk</CardTitle>
-                  <CardDescription>
-                    Kustomisasi tampilan struk pembayaran
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSaveReceipt} className="space-y-4 max-w-lg">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Header Struk
-                  </label>
-                  <Input value={receiptHeader} onChange={(e) => setReceiptHeader(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Alamat di Struk
-                  </label>
-                  <Input value={receiptAddress} onChange={(e) => setReceiptAddress(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Footer Struk
-                  </label>
-                  <Input value={receiptFooter} onChange={(e) => setReceiptFooter(e.target.value)} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSaveReceipt} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Footer Struk
+                    </label>
+                    <Input value={receiptFooter} onChange={(e) => setReceiptFooter(e.target.value)} placeholder="Pesan ucapan terima kasih" />
+                  </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
                       Ukuran Kertas
@@ -571,29 +654,44 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
                       value={receiptWidth}
                       onChange={(e) => setReceiptWidth(e.target.value)}
                     />
+                    <p className="text-[10px] text-muted-dim mt-1">Ukuran standar printer thermal adalah 58mm atau 80mm.</p>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Tampilkan Logo
-                    </label>
-                    <Select
-                      options={[
-                        { label: "Ya", value: "yes" },
-                        { label: "Tidak", value: "no" },
-                      ]}
-                      value={receiptLogo}
-                      onChange={(e) => setReceiptLogo(e.target.value)}
-                    />
+
+                  <div className="pt-2">
+                    <Button type="submit" disabled={isPending} className="w-full">
+                      {isPending ? <Loader2 className="mr-2 animate-spin" size={14} /> : <Save size={14} className="mr-2" />}
+                      Simpan Template
+                    </Button>
                   </div>
-                </div>
-                <Button type="submit" disabled={isPending}>
-                  <Save size={14} />
-                  Simpan Perubahan
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+                </form>
+              </CardContent>
+            </Card>
+
+            {/* Receipt Preview */}
+            <div className="sticky top-6 hidden lg:block animate-fade-left">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Printer size={14} className="text-accent" />
+                  Live Preview Struk
+                </h3>
+                <Badge variant="outline" className="font-num text-[10px] px-1.5 h-5">
+                  {receiptWidth}mm
+                </Badge>
+              </div>
+              
+              <ReceiptPreview 
+                data={{
+                  header: storeName,
+                  address: storeAddress,
+                  footer: receiptFooter,
+                  logo: receiptLogo === "yes" ? receiptLogoImage : null,
+                  width: receiptWidth
+                }}
+              />
+            </div>
+          </div>
         )}
+
 
         {/* Printer */}
         {activeTab === "printer" && (
@@ -715,74 +813,93 @@ export default function PengaturanClient({ initialSettings, users, variants }: P
           </Card>
         )}
 
-        {/* Pengguna */}
-        {activeTab === "pengguna" && (
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500/20 to-pink-500/20 flex items-center justify-center shadow-[0_0_12px_-3px_rgba(244,63,94,0.25)]">
-                    <Users size={15} className="text-rose-400" />
-                  </div>
-                  <div>
-                    <CardTitle>Manajemen Pengguna</CardTitle>
-                    <CardDescription>Kelola akses pengguna sistem</CardDescription>
-                  </div>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">
-                        Nama
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider hidden sm:table-cell">
-                        Email
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-muted-dim uppercase tracking-wider">
-                        Role
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((user) => (
-                      <tr
-                        key={user.id}
-                        className="border-b border-border last:border-0 hover:bg-white/[0.025] transition-all duration-300"
-                      >
-                        <td className="py-3 text-xs font-medium text-foreground">
-                          {user.name}
-                        </td>
-                        <td className="py-3 text-xs text-muted-foreground hidden sm:table-cell">
-                          {user.email}
-                        </td>
-                        <td className="py-3">
-                          <Select
-                            options={[
-                              { label: "Cashier", value: "cashier" },
-                              { label: "Manager", value: "manager" },
-                              { label: "Owner", value: "owner" },
-                            ]}
-                            value={user.role || "cashier"}
-                            onChange={(e) => handleChangeRole(user.id, e.target.value)}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+
 
         {/* Barcode */}
         {activeTab === "barcode" && (
           <BarcodeTab variants={variants} />
         )}
+      </div>
+    </div>
+  );
+}
+
+function ReceiptPreview({ data }: { data: any }) {
+  const now = new Date();
+  const W = data.width === "80" ? 48 : 32;
+
+  return (
+    <div className={`mx-auto bg-white text-black font-mono p-6 shadow-2xl rounded-sm border-t-8 border-accent transition-all duration-300 relative overflow-hidden`} style={{ width: data.width === "80" ? "300px" : "240px", fontSize: "11px" }}>
+      {/* Simulation of a physical paper texture/shadow */}
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-black/[0.02] to-transparent" />
+      
+      <div className="relative z-10 space-y-4">
+        {/* Logo */}
+        {data.logo && (
+          <div className="flex justify-center mb-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={data.logo} alt="Preview Logo" className="max-w-[80px] max-h-[80px] object-contain filter grayscale" />
+          </div>
+        )}
+
+        {/* Header */}
+        <div className="text-center space-y-0.5">
+          <p className="font-bold text-sm uppercase leading-tight">{data.header || "NAMA TOKO ANDA"}</p>
+          <p className="text-[10px] opacity-70 italic">{data.address || "Alamat Toko Anda..."}</p>
+        </div>
+
+        <div className="border-b border-dashed border-black/20 my-2" />
+
+        {/* Info */}
+        <div className="space-y-0.5 text-[10px]">
+          <div className="flex justify-between"><span>No. Order</span><span>#SAMPLE-2024</span></div>
+          <div className="flex justify-between"><span>Tanggal</span><span>{now.toLocaleDateString("id-ID")}</span></div>
+          <div className="flex justify-between"><span>Kasir</span><span>Admin</span></div>
+        </div>
+
+        <div className="border-b border-dashed border-black/20 my-2" />
+
+        {/* Items */}
+        <div className="space-y-1">
+          <div className="flex justify-between">
+            <div className="flex-1 pr-2">
+              <p className="font-bold uppercase">CONTOH PRODUK A</p>
+              <p className="text-[9px] opacity-60 italic">2 x Rp 25.000</p>
+            </div>
+            <p className="font-bold">Rp 50.000</p>
+          </div>
+          <div className="flex justify-between">
+            <div className="flex-1 pr-2">
+              <p className="font-bold uppercase">CONTOH PRODUK B</p>
+              <p className="text-[9px] opacity-60 italic">1 x Rp 15.000</p>
+            </div>
+            <p className="font-bold">Rp 15.000</p>
+          </div>
+        </div>
+
+        <div className="border-b border-dashed border-black/20 my-2" />
+
+        {/* Totals */}
+        <div className="space-y-1">
+          <div className="flex justify-between"><span>Subtotal</span><span>Rp 65.000</span></div>
+          <div className="flex justify-between"><span>PPN 11%</span><span>Rp 7.150</span></div>
+          <div className="flex justify-between font-bold text-sm pt-1 border-t border-black/10 mt-1 uppercase">
+            <span>Total</span><span>Rp 72.150</span>
+          </div>
+        </div>
+
+        <div className="border-b border-dashed border-black/20 my-2" />
+
+        {/* Footer */}
+        <div className="text-center space-y-0.5 opacity-70 py-2">
+          <p className="leading-tight">{data.footer || "Terima kasih atas kunjungan Anda!"}</p>
+          <p className="text-[9px] mt-2 font-bold tracking-widest uppercase">*** LUNAS ***</p>
+        </div>
+
+        {/* Simulation of paper edge */}
+        <div className="pt-4 flex justify-center opacity-20">
+          <div className="w-full h-2 border-t border-dashed border-black" />
+        </div>
       </div>
     </div>
   );

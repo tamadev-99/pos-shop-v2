@@ -19,20 +19,18 @@ export default async function DynamicReceiptPage({
         return notFound();
     }
 
-    // Resolve cashier name from ID
-    let cashierName = "Admin";
-    if (order.cashierId) {
-        const cashier = await db.select({ name: users.name }).from(users).where(eq(users.id, order.cashierId)).then(r => r[0]);
-        if (cashier) cashierName = cashier.name;
-    }
+    // Use employee name from the joined record
+    const cashierName = order.employee?.name ?? "Sistem";
 
     // Fetch store settings for the receipt header/footer
-    const [storeName, receiptAddress, storePhone, receiptFooter, taxName] = await Promise.all([
+    const [storeName, receiptAddress, storePhone, receiptFooter, taxName, receiptLogo, receiptLogoImage] = await Promise.all([
         getSetting("storeName"),
         getSetting("receiptAddress"),
         getSetting("storePhone"),
         getSetting("receiptFooter"),
         getSetting("taxName"),
+        getSetting("receiptLogo"),
+        getSetting("receiptLogoImage"),
     ]);
 
     return (
@@ -61,6 +59,8 @@ export default async function DynamicReceiptPage({
                 phone: (storePhone as string) || "",
                 footer: (receiptFooter as string) || "Terima kasih atas kunjungan Anda!",
                 taxName: (taxName as string) || "PPN",
+                receiptLogo: (receiptLogo as string) || "no",
+                receiptLogoImage: (receiptLogoImage as string) || "",
             }}
         />
     );

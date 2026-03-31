@@ -1,7 +1,8 @@
 import { pgTable, text, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
-import { users } from "./auth";
+import { stores } from "./auth";
 import { productVariants } from "./products";
+import { employeeProfiles } from "./profiles";
 
 export const opnameStatusEnum = pgEnum("opname_status", [
   "draft",
@@ -13,12 +14,13 @@ export const opnameStatusEnum = pgEnum("opname_status", [
 
 export const stockOpnames = pgTable("stock_opnames", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  code: text("code").notNull().unique(),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
+  code: text("code").notNull(),
   note: text("note"),
   status: opnameStatusEnum("status").notNull().default("draft"),
-  createdBy: text("created_by").references(() => users.id),
+  employeeProfileId: text("employee_profile_id").references(() => employeeProfiles.id),
   createdByName: text("created_by_name").notNull(),
-  reviewedBy: text("reviewed_by").references(() => users.id),
+  reviewedByProfileId: text("reviewed_by_profile_id").references(() => employeeProfiles.id),
   reviewedByName: text("reviewed_by_name"),
   reviewNote: text("review_note"),
   completedAt: timestamp("completed_at"),
@@ -29,6 +31,7 @@ export const stockOpnames = pgTable("stock_opnames", {
 export const stockOpnameItems = pgTable("stock_opname_items", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   opnameId: text("opname_id").notNull().references(() => stockOpnames.id, { onDelete: "cascade" }),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   variantId: text("variant_id").notNull().references(() => productVariants.id),
   systemStock: integer("system_stock").notNull(),
   actualStock: integer("actual_stock"),
@@ -38,9 +41,17 @@ export const stockOpnameItems = pgTable("stock_opname_items", {
 });
 
 export const stockOpnamesRelations = relations(stockOpnames, ({ one, many }) => ({
-  createdByUser: one(users, {
-    fields: [stockOpnames.createdBy],
-    references: [users.id],
+  employee: one(employeeProfiles, {
+    fields: [stockOpnames.employeeProfileId],
+    references: [employeeProfiles.id],
+  }),
+  reviewer: one(employeeProfiles, {
+    fields: [stockOpnames.reviewedByProfileId],
+    references: [employeeProfiles.id],
+  }),
+  store: one(stores, {
+    fields: [stockOpnames.storeId],
+    references: [stores.id],
   }),
   items: many(stockOpnameItems),
 }));
@@ -54,4 +65,9 @@ export const stockOpnameItemsRelations = relations(stockOpnameItems, ({ one }) =
     fields: [stockOpnameItems.variantId],
     references: [productVariants.id],
   }),
+  store: one(stores, {
+    fields: [stockOpnameItems.storeId],
+    references: [stores.id],
+  }),
 }));
+

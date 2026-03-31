@@ -85,11 +85,13 @@ interface PurchaseOrder {
   status: POStatus;
   total: number;
   notes: string | null;
-  createdBy: string | null;
+  employeeProfileId: string | null;
   createdAt: Date;
   supplier: POSupplier;
   items: POItem[];
   timeline: POTimelineEntry[];
+  employee?: { name: string } | null;
+  createdByUser?: { name: string } | null;
 }
 
 interface Supplier {
@@ -626,6 +628,14 @@ export default function PembelianClient({ initialPOs, suppliers, products, categ
                       </p>
                       <p className="text-xs font-bold text-gradient font-num mt-0.5">
                         {formatRupiah(selectedPO.total)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-muted-dim uppercase tracking-wider">
+                        Dibuat Oleh
+                      </p>
+                      <p className="text-xs font-medium text-foreground mt-0.5">
+                        {selectedPO.employee?.name || selectedPO.createdByUser?.name || "Sistem"}
                       </p>
                     </div>
                   </div>

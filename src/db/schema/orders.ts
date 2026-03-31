@@ -1,8 +1,9 @@
 import { pgTable, text, integer, timestamp, pgEnum, jsonb } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
-import { users } from "./auth";
+import { stores } from "./auth";
 import { customers } from "./customers";
 import { productVariants } from "./products";
+import { employeeProfiles } from "./profiles";
 
 export const orderStatusEnum = pgEnum("order_status", ["pending", "selesai", "dibatalkan"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["tunai", "debit", "kredit", "transfer", "qris", "ewallet"]);
@@ -21,7 +22,8 @@ export const orders = pgTable("orders", {
   changeAmount: integer("change_amount"),
   status: orderStatusEnum("status").notNull().default("selesai"),
   paymentMethod: paymentMethodEnum("payment_method").notNull().default("tunai"),
-  cashierId: text("cashier_id").references(() => users.id),
+  employeeProfileId: text("employee_profile_id").references(() => employeeProfiles.id),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   shiftId: text("shift_id"),
   notes: text("notes"),
   bankName: text("bank_name"),
@@ -39,16 +41,18 @@ export const orderItems = pgTable("order_items", {
   unitPrice: integer("unit_price").notNull(),
   costPrice: integer("cost_price").notNull().default(0),
   subtotal: integer("subtotal").notNull(),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
 });
 
 export const heldTransactions = pgTable("held_transactions", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  cashierId: text("cashier_id").references(() => users.id),
+  employeeProfileId: text("employee_profile_id").references(() => employeeProfiles.id),
   customerName: text("customer_name"),
   customerId: text("customer_id"),
   items: jsonb("items").notNull(),
   shippingFee: integer("shipping_fee").default(0),
   notes: text("notes"),
+  storeId: text("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -58,9 +62,13 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     fields: [orders.customerId],
     references: [customers.id],
   }),
-  cashier: one(users, {
-    fields: [orders.cashierId],
-    references: [users.id],
+  employee: one(employeeProfiles, {
+    fields: [orders.employeeProfileId],
+    references: [employeeProfiles.id],
+  }),
+  store: one(stores, {
+    fields: [orders.storeId],
+    references: [stores.id],
   }),
   items: many(orderItems),
 }));
@@ -74,4 +82,20 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
     fields: [orderItems.variantId],
     references: [productVariants.id],
   }),
+  store: one(stores, {
+    fields: [orderItems.storeId],
+    references: [stores.id],
+  }),
 }));
+
+export const heldTransactionsRelations = relations(heldTransactions, ({ one }) => ({
+  employee: one(employeeProfiles, {
+    fields: [heldTransactions.employeeProfileId],
+    references: [employeeProfiles.id],
+  }),
+  store: one(stores, {
+    fields: [heldTransactions.storeId],
+    references: [stores.id],
+  }),
+}));
+

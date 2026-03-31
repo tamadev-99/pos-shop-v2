@@ -23,6 +23,7 @@ import {
   VariantBuilder,
   type VariantRow,
 } from "@/components/produk/variant-builder";
+import { WholesaleBuilder, type WholesaleTier } from "@/components/produk/wholesale-builder";
 import { updateProduct, createProduct, getProducts, getAllVariantsFlat } from "@/lib/actions/products";
 import { exportToCSV } from "@/lib/export-csv";
 import { ImportDialog } from "@/components/produk/import-dialog";
@@ -137,13 +138,14 @@ interface ProdukClientProps {
   categories: DBCategory[];
   suppliers: DBSupplier[];
   initialVariants: any[];
+  storeType: string;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export default function ProdukClient({ initialProducts, totalProducts = 0, categories, suppliers, initialVariants }: ProdukClientProps) {
+export default function ProdukClient({ initialProducts, totalProducts = 0, categories, suppliers, initialVariants, storeType }: ProdukClientProps) {
   const router = useRouter();
 
   const [products, setProducts] = useState<DBProduct[]>(initialProducts);
@@ -193,6 +195,9 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
   const [formSingleBarcode, setFormSingleBarcode] = useState("");
   const [formSingleStock, setFormSingleStock] = useState("");
   const [singleScanning, setSingleScanning] = useState(false);
+
+  // Wholesale state (Mini Mart only)
+  const [formWholesales, setFormWholesales] = useState<WholesaleTier[]>([]);
 
   // Bundle state
   const [bundleComponents, setBundleComponents] = useState<{ variantId: string; variantLabel: string; quantity: number }[]>([]);
@@ -331,6 +336,7 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
     setFormVariants([]);
     setFormSingleBarcode("");
     setFormSingleStock("");
+    setFormWholesales([]);
     setBundleComponents([]);
     setBundleBarcode("");
     setBundleSearchQuery("");
@@ -378,6 +384,7 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
       setFormVariants([]);
       setFormSingleBarcode("");
       setFormSingleStock("");
+      setFormWholesales([]);
     } else {
       resetForm();
     }
@@ -451,6 +458,7 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
             minStock: 5,
             buyPrice: parseInt(formBaseCost) || 0,
             sellPrice: parseInt(formBasePrice) || 0,
+            wholesaleTiers: formWholesales.length > 0 ? formWholesales : undefined,
           }];
         }
 
@@ -1087,7 +1095,7 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
                     <div className="flex gap-2">
                       {[
                         { key: "single" as const, label: "Tunggal", icon: <Package size={14} /> },
-                        { key: "variant" as const, label: "Multi Varian", icon: <ChevronDown size={14} /> },
+                        ...(storeType === "clothing" ? [{ key: "variant" as const, label: "Multi Varian", icon: <ChevronDown size={14} /> }] : []),
                         { key: "bundle" as const, label: "Paket / Bundle", icon: <PackageOpen size={14} /> },
                       ].map((opt) => (
                         <button
@@ -1156,6 +1164,17 @@ export default function ProdukClient({ initialProducts, totalProducts = 0, categ
                           </Button>
                         </div>
                       </div>
+
+                      {/* Wholesale Builder for Minimart */}
+                      {storeType === "minimart" && (
+                        <div className="col-span-2 pt-4 border-t border-border mt-2">
+                          <WholesaleBuilder
+                            tiers={formWholesales}
+                            onChange={setFormWholesales}
+                            basePrice={parseInt(formBasePrice) || 0}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
 

@@ -57,6 +57,13 @@
       "when": 1772916030280,
       "tag": "0007_glorious_centennial",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1774848295924,
+      "tag": "0008_quiet_hannibal_king",
+      "breakpoints": true
     }
   ]
 }

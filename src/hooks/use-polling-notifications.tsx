@@ -19,7 +19,7 @@ export function usePollingNotifications(intervalMs = 15000) { // Default 15 seco
 
         const poll = async () => {
             try {
-                const unreadNotifs = await getUnreadNotificationsForPolling(user.id);
+                const unreadNotifs = await getUnreadNotificationsForPolling();
 
                 unreadNotifs.forEach((notif) => {
                     if (!toastedIds.current.has(notif.id)) {

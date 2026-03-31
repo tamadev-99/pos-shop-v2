@@ -5,10 +5,12 @@ import { customers, storeSettings } from "@/db/schema";
 import { eq, like, and, desc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getCurrentUser } from "@/lib/actions/auth-helpers";
+import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
 
 export async function getCustomers(filters?: { search?: string; tier?: string }) {
-  const conditions = [];
+  const storeId = await getActiveStoreId();
+  const conditions = [eq(customers.storeId, storeId)];
+
   if (filters?.search) {
     conditions.push(like(customers.name, `%${filters.search}%`));
   }
@@ -19,13 +21,14 @@ export async function getCustomers(filters?: { search?: string; tier?: string })
   return db
     .select()
     .from(customers)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(customers.createdAt));
 }
 
 export async function getCustomerById(id: string) {
+  const storeId = await getActiveStoreId();
   return db.query.customers.findFirst({
-    where: eq(customers.id, id),
+    where: and(eq(customers.id, id), eq(customers.storeId, storeId)),
   });
 }
 
@@ -36,6 +39,7 @@ export async function createCustomer(data: {
   address?: string;
   birthDate?: string;
 }) {
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
   const id = crypto.randomUUID();
   const today = new Date().toISOString().split("T")[0];
 
@@ -47,20 +51,19 @@ export async function createCustomer(data: {
     address: data.address || "",
     birthDate: data.birthDate,
     joinDate: today,
+    storeId,
   });
 
-  const user = await getCurrentUser();
-  if (user) {
-    createAuditLog({
-      userId: user.id,
-      userName: user.name || "Unknown",
-      action: "pelanggan",
-      detail: `Pelanggan baru ditambahkan: ${data.name}`,
-      metadata: { customerId: id, name: data.name, phone: data.phone },
-    }).catch(() => {});
-  }
+  createAuditLog({
+    userName,
+    action: "pelanggan",
+    detail: `Pelanggan baru ditambahkan: ${data.name}`,
+    metadata: { customerId: id, name: data.name, phone: data.phone },
+    storeId,
+    employeeProfileId,
+  }).catch(() => {});
 
-  revalidatePath("/pelanggan");
+  revalidatePath("/kontak");
   return id;
 }
 
@@ -74,68 +77,69 @@ export async function updateCustomer(
     birthDate: string;
   }>
 ) {
-  await db.update(customers).set(data).where(eq(customers.id, id));
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  await db
+    .update(customers)
+    .set(data)
+    .where(and(eq(customers.id, id), eq(customers.storeId, storeId)));
 
-  const user = await getCurrentUser();
-  if (user) {
-    createAuditLog({
-      userId: user.id,
-      userName: user.name || "Unknown",
-      action: "pelanggan",
-      detail: `Data pelanggan diperbarui`,
-      metadata: { customerId: id, changes: data },
-    }).catch(() => {});
-  }
+  createAuditLog({
+    userName,
+    action: "pelanggan",
+    detail: `Data pelanggan diperbarui`,
+    metadata: { customerId: id, changes: data },
+    storeId,
+    employeeProfileId,
+  }).catch(() => {});
 
-  revalidatePath("/pelanggan");
+  revalidatePath("/kontak");
 }
 
 export async function addLoyaltyPoints(customerId: string, points: number) {
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
+
   await db
     .update(customers)
     .set({
       points: sql`${customers.points} + ${points}`,
     })
-    .where(eq(customers.id, customerId));
+    .where(and(eq(customers.id, customerId), eq(customers.storeId, storeId)));
 
-  const user = await getCurrentUser();
-  if (user) {
-    createAuditLog({
-      userId: user.id,
-      userName: user.name || "Unknown",
-      action: "pelanggan",
-      detail: `Poin loyalitas ditambahkan: +${points} poin`,
-      metadata: { customerId, pointsAdded: points },
-    }).catch(() => {});
-  }
+  createAuditLog({
+    userName,
+    action: "pelanggan",
+    detail: `Poin loyalitas ditambahkan: +${points} poin`,
+    metadata: { customerId, pointsAdded: points },
+    storeId,
+    employeeProfileId,
+  }).catch(() => {});
 
   await recalculateTier(customerId);
-  revalidatePath("/pelanggan");
+  revalidatePath("/kontak");
 }
 
 export async function redeemPoints(customerId: string, points: number) {
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
+
   await db
     .update(customers)
     .set({
       points: sql`${customers.points} - ${points}`,
     })
-    .where(eq(customers.id, customerId));
+    .where(and(eq(customers.id, customerId), eq(customers.storeId, storeId)));
 
-  const user = await getCurrentUser();
-  if (user) {
-    createAuditLog({
-      userId: user.id,
-      userName: user.name || "Unknown",
-      action: "pelanggan",
-      detail: `Poin loyalitas ditukarkan: -${points} poin`,
-      metadata: { customerId, pointsRedeemed: points },
-    }).catch(() => {});
-  }
+  createAuditLog({
+    userName,
+    action: "pelanggan",
+    detail: `Poin loyalitas ditukarkan: -${points} poin`,
+    metadata: { customerId, pointsRedeemed: points },
+    storeId,
+    employeeProfileId,
+  }).catch(() => {});
 
-  revalidatePath("/pelanggan");
+  revalidatePath("/kontak");
 }
 
-// Default tier thresholds (based on totalSpent in Rupiah) used when no settings configured
 const DEFAULT_TIER_THRESHOLDS: { name: string; minSpent: number }[] = [
   { name: "Platinum", minSpent: 10000000 },
   { name: "Gold", minSpent: 5000000 },
@@ -143,45 +147,44 @@ const DEFAULT_TIER_THRESHOLDS: { name: string; minSpent: number }[] = [
   { name: "Bronze", minSpent: 0 },
 ];
 
-async function getTierThresholds(): Promise<{ name: string; minSpent: number }[]> {
+async function getTierThresholds(storeId: string): Promise<{ name: string; minSpent: number }[]> {
   try {
     const setting = await db
       .select()
       .from(storeSettings)
-      .where(eq(storeSettings.key, "memberTiers"))
+      .where(and(eq(storeSettings.storeId, storeId), eq(storeSettings.key, "memberTiers")))
       .limit(1);
 
     const raw = setting[0]?.value;
     const tiers = typeof raw === "string" ? JSON.parse(raw) : Array.isArray(raw) ? raw : null;
 
     if (tiers && tiers.length > 0) {
-      // Map minPoints to minSpent threshold — sorted descending so highest tier is checked first
       return tiers
         .map((t: { name: string; minPoints: number }) => ({
           name: t.name,
-          minSpent: (t.minPoints ?? 0) * 1000, // 1 point = Rp1.000 spent
+          minSpent: (t.minPoints ?? 0) * 1000,
         }))
         .sort((a: { minSpent: number }, b: { minSpent: number }) => b.minSpent - a.minSpent);
     }
   } catch {
-    // fallback to defaults
+    // fallback
   }
   return DEFAULT_TIER_THRESHOLDS;
 }
 
 export async function recalculateTier(customerId: string) {
+  const storeId = await getActiveStoreId();
   const customer = await db
     .select()
     .from(customers)
-    .where(eq(customers.id, customerId))
+    .where(and(eq(customers.id, customerId), eq(customers.storeId, storeId)))
     .limit(1);
 
   if (!customer[0]) return;
 
   const spent = customer[0].totalSpent;
-  const thresholds = await getTierThresholds();
+  const thresholds = await getTierThresholds(storeId);
 
-  // Find the highest tier the customer qualifies for
   let tier: "Bronze" | "Silver" | "Gold" | "Platinum" = "Bronze";
   for (const t of thresholds) {
     if (spent >= t.minSpent) {
@@ -190,24 +193,15 @@ export async function recalculateTier(customerId: string) {
     }
   }
 
-  if (tier !== customer[0].tier) {
-    const user = await getCurrentUser();
-    if (user) {
-      createAuditLog({
-        userId: user.id,
-        userName: user.name || "Unknown",
-        action: "pelanggan",
-        detail: `Tier pelanggan berubah: ${customer[0].tier} → ${tier}`,
-        metadata: { customerId, oldTier: customer[0].tier, newTier: tier },
-      }).catch(() => {});
-    }
-  }
-
   await db.update(customers).set({ tier }).where(eq(customers.id, customerId));
 }
 
 export async function getCustomerStats() {
-  const allCustomers = await db.select().from(customers);
+  const storeId = await getActiveStoreId();
+  const allCustomers = await db
+    .select()
+    .from(customers)
+    .where(eq(customers.storeId, storeId));
   const thisMonth = new Date().toISOString().slice(0, 7);
 
   return {

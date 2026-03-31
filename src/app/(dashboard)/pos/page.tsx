@@ -1,3 +1,4 @@
+import { enforceRouteAccess } from '@/lib/actions/permissions';
 import { getProducts } from "@/lib/actions/products";
 import { getCustomers } from "@/lib/actions/customers";
 import { getActivePromotions } from "@/lib/actions/promotions";
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { AlertTriangle, Clock } from "lucide-react";
 
 export default async function POSPage() {
+  await enforceRouteAccess('/pos');
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -21,7 +23,7 @@ export default async function POSPage() {
   }
 
   // Check shift status
-  const shiftStatus = await checkCashierShift(session.user.id);
+  const shiftStatus = await checkCashierShift();
 
   if (!shiftStatus.hasActiveShift || shiftStatus.isPreviousDay) {
     return (
@@ -89,8 +91,6 @@ export default async function POSPage() {
     storePhone,
     taxRate: Number(settings.taxRate) || 11,
     taxIncluded: (settings.taxIncluded as string) || "no",
-    receiptHeader: (settings.receiptHeader as string) || storeName,
-    receiptAddress: (settings.receiptAddress as string) || storeAddress,
     receiptFooter: (settings.receiptFooter as string) || "Terima kasih atas kunjungan Anda!",
   };
 

@@ -8,10 +8,11 @@ import {
   products,
   categories,
 } from "@/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireAuth, requireRole, getCurrentUser } from "@/lib/actions/auth-helpers";
+import { requireRole } from "@/lib/actions/auth-helpers";
 import { createAuditLog } from "@/lib/actions/audit";
+import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
 
 function generateOpnameCode() {
   const now = new Date();
@@ -21,11 +22,14 @@ function generateOpnameCode() {
 }
 
 export async function getStockOpnames() {
-  const opnames = await db
-    .select()
-    .from(stockOpnames)
-    .orderBy(desc(stockOpnames.createdAt))
-    .limit(50);
+  const storeId = await getActiveStoreId();
+
+  const opnames = await db.query.stockOpnames.findMany({
+    where: eq(stockOpnames.storeId, storeId),
+    with: { employee: true, reviewer: true },
+    orderBy: [desc(stockOpnames.createdAt)],
+    limit: 50,
+  });
 
   const withCounts = await Promise.all(
     opnames.map(async (opname) => {
@@ -53,13 +57,14 @@ export async function getStockOpnames() {
 }
 
 export async function getStockOpnameById(id: string) {
-  const opname = await db
-    .select()
-    .from(stockOpnames)
-    .where(eq(stockOpnames.id, id))
-    .limit(1);
+  const storeId = await getActiveStoreId();
 
-  if (!opname[0]) return null;
+  const opname = await db.query.stockOpnames.findFirst({
+    where: and(eq(stockOpnames.id, id), eq(stockOpnames.storeId, storeId)),
+    with: { employee: true, reviewer: true },
+  });
+
+  if (!opname) return null;
 
   const items = await db
     .select({
@@ -87,15 +92,14 @@ export async function getStockOpnameById(id: string) {
     .where(eq(stockOpnameItems.opnameId, id))
     .orderBy(products.name, productVariants.color, productVariants.size);
 
-  return { ...opname[0], items };
+  return { ...opname, items };
 }
 
-// Any authenticated user can create a stock opname
 export async function createStockOpname(data: {
   note?: string;
   variantIds: string[];
 }) {
-  const user = await requireAuth();
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
 
   const opnameId = crypto.randomUUID();
   const code = generateOpnameCode();
@@ -105,8 +109,9 @@ export async function createStockOpname(data: {
     code,
     note: data.note || null,
     status: "in_progress",
-    createdBy: user.id,
-    createdByName: user.name,
+    employeeProfileId,
+    createdByName: userName,
+    storeId,
   });
 
   const variants = await db
@@ -116,7 +121,10 @@ export async function createStockOpname(data: {
     })
     .from(productVariants)
     .where(
-      sql`${productVariants.id} IN ${data.variantIds}`
+      and(
+        eq(productVariants.storeId, storeId),
+        sql`${productVariants.id} IN ${data.variantIds}`
+      )
     );
 
   if (variants.length > 0) {
@@ -129,30 +137,29 @@ export async function createStockOpname(data: {
         actualStock: null,
         difference: null,
         note: null,
+        storeId,
       }))
     );
   }
 
   createAuditLog({
-    userId: user.id,
-    userName: user.name,
+    userName,
     action: "stok",
     detail: `Stok opname dibuat: ${code} (${variants.length} item)`,
     metadata: { opnameId, code },
+    storeId,
+    employeeProfileId,
   }).catch(() => {});
 
   revalidatePath("/audit");
   return { id: opnameId, code };
 }
 
-// Any authenticated user can input stock counts
 export async function updateOpnameItem(
   itemId: string,
   actualStock: number,
   note?: string
 ) {
-  await requireAuth();
-
   const item = await db
     .select()
     .from(stockOpnameItems)
@@ -161,7 +168,6 @@ export async function updateOpnameItem(
 
   if (!item[0]) throw new Error("Item tidak ditemukan");
 
-  // Verify the opname is still in_progress
   const opname = await db
     .select()
     .from(stockOpnames)
@@ -186,14 +192,13 @@ export async function updateOpnameItem(
   revalidatePath("/audit");
 }
 
-// Any authenticated user can submit for review
 export async function submitForReview(opnameId: string) {
-  const user = await requireAuth();
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
 
   const opname = await db
     .select()
     .from(stockOpnames)
-    .where(eq(stockOpnames.id, opnameId))
+    .where(and(eq(stockOpnames.id, opnameId), eq(stockOpnames.storeId, storeId)))
     .limit(1);
 
   if (!opname[0]) throw new Error("Stok opname tidak ditemukan");
@@ -201,7 +206,6 @@ export async function submitForReview(opnameId: string) {
     throw new Error("Hanya opname yang sedang berlangsung yang dapat diajukan review");
   }
 
-  // Ensure at least one item has been counted
   const counted = await db
     .select({ count: sql<number>`count(*)` })
     .from(stockOpnameItems)
@@ -222,28 +226,29 @@ export async function submitForReview(opnameId: string) {
     .where(eq(stockOpnames.id, opnameId));
 
   createAuditLog({
-    userId: user.id,
-    userName: user.name,
+    userName,
     action: "stok",
     detail: `Stok opname diajukan review: ${opname[0].code}`,
     metadata: { opnameId, code: opname[0].code },
+    storeId,
+    employeeProfileId,
   }).catch(() => {});
 
   revalidatePath("/audit");
 }
 
-// Only manager/owner can approve and apply stock adjustments
 export async function approveStockOpname(
   opnameId: string,
   applyAdjustments: boolean,
   reviewNote?: string
 ) {
-  const user = await requireRole("manager", "owner");
+  await requireRole("manager", "owner");
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
 
   const opname = await db
     .select()
     .from(stockOpnames)
-    .where(eq(stockOpnames.id, opnameId))
+    .where(and(eq(stockOpnames.id, opnameId), eq(stockOpnames.storeId, storeId)))
     .limit(1);
 
   if (!opname[0]) throw new Error("Stok opname tidak ditemukan");
@@ -271,8 +276,8 @@ export async function approveStockOpname(
     .update(stockOpnames)
     .set({
       status: "completed",
-      reviewedBy: user.id,
-      reviewedByName: user.name,
+      reviewedByProfileId: employeeProfileId,
+      reviewedByName: userName,
       reviewNote: reviewNote || null,
       completedAt: new Date(),
       updatedAt: new Date(),
@@ -280,11 +285,12 @@ export async function approveStockOpname(
     .where(eq(stockOpnames.id, opnameId));
 
   createAuditLog({
-    userId: user.id,
-    userName: user.name,
+    userName,
     action: "stok",
     detail: `Stok opname disetujui: ${opname[0].code}${applyAdjustments ? " (stok disesuaikan)" : " (tanpa penyesuaian)"}`,
     metadata: { opnameId, code: opname[0].code, applyAdjustments },
+    storeId,
+    employeeProfileId,
   }).catch(() => {});
 
   revalidatePath("/audit");
@@ -292,14 +298,14 @@ export async function approveStockOpname(
   revalidatePath("/pos");
 }
 
-// Only manager/owner can reject — sends back to in_progress
 export async function rejectStockOpname(opnameId: string, reviewNote?: string) {
-  const user = await requireRole("manager", "owner");
+  await requireRole("manager", "owner");
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
 
   const opname = await db
     .select()
     .from(stockOpnames)
-    .where(eq(stockOpnames.id, opnameId))
+    .where(and(eq(stockOpnames.id, opnameId), eq(stockOpnames.storeId, storeId)))
     .limit(1);
 
   if (!opname[0]) throw new Error("Stok opname tidak ditemukan");
@@ -311,33 +317,33 @@ export async function rejectStockOpname(opnameId: string, reviewNote?: string) {
     .update(stockOpnames)
     .set({
       status: "in_progress",
-      reviewedBy: user.id,
-      reviewedByName: user.name,
+      reviewedByProfileId: employeeProfileId,
+      reviewedByName: userName,
       reviewNote: reviewNote || null,
       updatedAt: new Date(),
     })
     .where(eq(stockOpnames.id, opnameId));
 
   createAuditLog({
-    userId: user.id,
-    userName: user.name,
+    userName,
     action: "stok",
     detail: `Stok opname ditolak & dikembalikan: ${opname[0].code}`,
     metadata: { opnameId, code: opname[0].code, reviewNote },
+    storeId,
+    employeeProfileId,
   }).catch(() => {});
 
   revalidatePath("/audit");
 }
 
-// Only manager/owner can cancel
 export async function cancelStockOpname(opnameId: string) {
   await requireRole("manager", "owner");
-  const user = await getCurrentUser();
+  const { storeId, employeeProfileId, userName } = await getStoreContext();
 
   const opname = await db
     .select()
     .from(stockOpnames)
-    .where(eq(stockOpnames.id, opnameId))
+    .where(and(eq(stockOpnames.id, opnameId), eq(stockOpnames.storeId, storeId)))
     .limit(1);
 
   if (!opname[0]) throw new Error("Stok opname tidak ditemukan");
@@ -351,12 +357,14 @@ export async function cancelStockOpname(opnameId: string) {
     .where(eq(stockOpnames.id, opnameId));
 
   createAuditLog({
-    userId: user?.id,
-    userName: user?.name || "Unknown",
+    userName,
     action: "stok",
     detail: `Stok opname dibatalkan: ${opname[0].code}`,
     metadata: { opnameId, code: opname[0].code },
+    storeId,
+    employeeProfileId,
   }).catch(() => {});
 
   revalidatePath("/audit");
 }
+
