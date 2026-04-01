@@ -90,7 +90,7 @@ export default async function LaporanPage() {
         expense: todayReconciliation.expense,
         net: todayReconciliation.net,
       }}
-      todayReconciliationLog={todayReconciliationLog}
+      todayReconciliationLog={todayReconciliationLog || null}
       expenseCategories={mappedCategories}
       recurringExpenses={mappedRecurring}
     />

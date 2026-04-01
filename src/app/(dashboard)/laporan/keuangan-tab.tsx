@@ -126,12 +126,18 @@ export interface KeuanganTabProps {
   };
   todayReconciliationLog: {
     id: string;
+    date: string;
     calculatedIncome: number;
     calculatedExpense: number;
     actualCashInHand: number;
     difference: number;
     notes: string | null;
     status: "draft" | "completed";
+    createdAt: Date;
+    updatedAt: Date;
+    storeId: string;
+    employeeProfileId: string | null;
+    employee?: { name: string } | null;
   } | null;
   expenseCategories?: ExpenseCategory[];
   recurringExpenses?: RecurringExpense[];
