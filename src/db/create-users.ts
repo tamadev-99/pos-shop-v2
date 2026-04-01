@@ -7,8 +7,8 @@ async function createUsers() {
   console.log("👤 Creating users...\n");
 
   const users = [
-    { name: "Owner", email: "owner@kasirpro.com", password: "owner123", role: "owner" },
-    { name: "Kasir", email: "kasir@kasirpro.com", password: "kasir123", role: "cashier" },
+    { name: "Owner", email: "owner@noru.com", password: "owner123", role: "owner" },
+    { name: "SaaS Admin", email: "admin@noru.com", password: "admin123", role: "saas-admin" },
   ];
 
   for (const user of users) {
@@ -44,7 +44,7 @@ async function createUsers() {
 
       const userId = data?.user?.id || data?.id;
       if (userId) {
-        await db.update(usersTable).set({ role: user.role as "cashier" | "manager" | "owner" }).where(eq(usersTable.id, userId));
+        await db.update(usersTable).set({ role: user.role as "owner" | "saas-admin" }).where(eq(usersTable.id, userId));
         console.log(`  ✅ ${user.email} role set to: ${user.role}`);
       }
 
@@ -57,8 +57,8 @@ async function createUsers() {
 
   console.log("\n✨ Done!");
   console.log("\n📋 Login credentials:");
-  console.log("   Owner:  owner@kasirpro.com / owner123");
-  console.log("   Kasir:  kasir@kasirpro.com / kasir123");
+  console.log("   Owner:       owner@noru.com / owner123");
+  console.log("   SaaS Admin:  admin@noru.com / admin123");
   process.exit(0);
 }
 
