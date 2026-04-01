@@ -16,6 +16,11 @@ export default async function SelectStorePage() {
     redirect("/login");
   }
 
+  // If user is a SaaS Admin, they don't need to select a store
+  if ((session.user as any).role === "saas-admin") {
+    redirect("/admin/tenants");
+  }
+
   // Find user's tenant
   const userTenant = await db.query.tenants.findFirst({
     where: eq(tenants.ownerId, session.user.id),

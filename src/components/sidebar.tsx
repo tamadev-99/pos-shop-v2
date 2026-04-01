@@ -156,7 +156,7 @@ export function Sidebar({ customPermissions }: SidebarProps = {}) {
           {!collapsed && (
             <div className="flex flex-col">
               <span className="font-bold text-base tracking-tight leading-none text-foreground">
-                KasirPro
+                Noru POS
               </span>
               <span className="text-[10px] font-medium tracking-wider text-accent uppercase mt-0.5">
                 Point of Sale
@@ -335,7 +335,7 @@ export function Sidebar({ customPermissions }: SidebarProps = {}) {
             <Sparkles size={14} />
           </div>
           <span className="font-bold text-sm tracking-tight text-foreground">
-            KasirPro
+            Noru POS
           </span>
         </div>
       </div>

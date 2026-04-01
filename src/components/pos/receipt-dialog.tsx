@@ -70,7 +70,7 @@ export function ReceiptDialog({
     customerName,
     customerPhone,
     cashierName,
-    storeName = "KasirPro",
+    storeName = "Noru POS",
     storeAddress,
     storePhone,
     receiptFooter,
@@ -333,7 +333,7 @@ export function ReceiptDialog({
                     <div className="border-b border-dashed border-border my-2" />
                     <div className="text-center space-y-0.5 text-muted-foreground">
                         <p>{receiptFooter || "Terima kasih atas kunjungan Anda!"}</p>
-                        <p className="text-[10px]">Powered by KasirPro</p>
+                        <p className="text-[10px]">Powered by Noru POS</p>
                     </div>
                 </div>
             </div>

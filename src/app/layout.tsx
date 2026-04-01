@@ -24,8 +24,8 @@ const instrumentSans = Instrument_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "KasirPro — Sistem Point of Sale",
-  description: "Sistem POS modern untuk bisnis retail Anda",
+  title: "Noru POS — Sistem Point of Sale terbaik untuk UMKM",
+  description: "Kelola bisnis ritel Anda dengan mudah. Mendukung Toko Pakaian, Mini Mart, dan lainnya dengan arsitektur multi-tenant.",
 };
 
 export const viewport: Viewport = {

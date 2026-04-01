@@ -30,7 +30,14 @@ export default function LoginPage() {
         toast.error(result.error.message || "Email atau kata sandi salah");
       } else {
         toast.success("Berhasil masuk!");
-        router.push("/select-store");
+        
+        // Cek session untuk menentukan redirect
+        const { data: session } = await authClient.getSession();
+        if ((session?.user as any)?.role === "saas-admin") {
+          router.push("/admin/tenants");
+        } else {
+          router.push("/select-store");
+        }
         router.refresh();
       }
     } catch {
@@ -63,7 +70,7 @@ export default function LoginPage() {
               <Sparkles size={28} />
             </div>
             <h1 className="text-2xl font-bold tracking-tight font-[family-name:var(--font-display)]">
-              <span className="text-gradient">KasirPro</span>
+              <span className="text-gradient">Noru POS</span>
             </h1>
             <p className="text-xs text-muted-foreground mt-1.5">
               Masuk ke akun Anda untuk melanjutkan
@@ -162,7 +169,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-[11px] text-muted-dim mt-6">
-          &copy; 2026 KasirPro. Semua hak dilindungi.
+          &copy; 2026 Noru POS. Semua hak dilindungi.
         </p>
       </div>
     </div>

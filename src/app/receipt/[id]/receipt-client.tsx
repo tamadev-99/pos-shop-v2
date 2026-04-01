@@ -252,7 +252,7 @@ export function ReceiptClient({ order, store }: ReceiptClientProps) {
                         </p>
                         <div className="flex flex-col items-center gap-1.5">
                             <div className="w-8 h-1 bg-accent/20 rounded-full mb-1" />
-                            <p className="text-[9px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-[0.4em]">Powered by KasirPro</p>
+                            <p className="text-[9px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-[0.4em]">Powered by Noru POS</p>
                         </div>
                     </div>
                 </div>

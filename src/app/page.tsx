@@ -16,8 +16,8 @@ import {
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "TamaPOS | The Ultimate Multi-Tenant SaaS POS System",
-  description: "Manage your retail business with ease. Supports Clothing Stores, Mini Marts, and more with multi-tenant architecture and employee PIN security.",
+  title: "Noru POS | Sistem Kasir SaaS Multi-Tenant Terbaik",
+  description: "Kelola bisnis ritel Anda dengan mudah. Mendukung Toko Pakaian, Mini Mart, dan lainnya dengan arsitektur multi-tenant dan keamanan PIN karyawan.",
 };
 
 export default function LandingPage() {
@@ -34,9 +34,9 @@ export default function LandingPage() {
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/20">
-              T
+              N
             </div>
-            <span className="text-xl font-bold tracking-tight">Tama<span className="text-indigo-500">POS</span></span>
+            <span className="text-xl font-bold tracking-tight">Noru<span className="text-indigo-500"> POS</span></span>
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
             <a href="#features" className="hover:text-white transition-colors">Features</a>
@@ -60,7 +60,7 @@ export default function LandingPage() {
       <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden">
         <div className="container mx-auto px-6 text-center">
           <Badge variant="outline" className="mb-6 border-indigo-500/30 bg-indigo-500/5 text-indigo-400 py-1.5 px-4 animate-in fade-in slide-in-from-bottom-3 duration-500">
-            Next-Gen Multi-Tenant POS
+            Sistem Kasir Multi-Tenant Masa Depan
           </Badge>
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-8 bg-clip-text text-transparent bg-gradient-to-br from-white via-white to-slate-500 animate-in fade-in slide-in-from-bottom-10 duration-700">
             One Platform.<br />Unlimited Businesses.
@@ -137,7 +137,7 @@ export default function LandingPage() {
             <div className="flex-1">
               <h2 className="text-4xl md:text-5xl font-extrabold mb-8">Tailored for Your Industry</h2>
               <p className="text-slate-400 text-lg mb-8 leading-relaxed">
-                TamaPOS isn't just a generic checkout tool. We've built industry-specific logic to ensure your workflow is seamless, no matter what you sell.
+                Noru POS bukan sekadar alat kasir biasa. Kami membangun logika spesifik industri untuk memastikan alur kerja Anda lancar, apa pun yang Anda jual.
               </p>
               <ul className="space-y-4">
                 {[
@@ -172,13 +172,13 @@ export default function LandingPage() {
         <div className="container mx-auto px-6">
           <div className="relative p-12 md:p-20 rounded-[40px] bg-indigo-600 overflow-hidden text-center group">
             <div className="absolute top-0 left-0 w-full h-full bg-slate-950/20 hover:bg-slate-950/10 transition-colors pointer-events-none" />
-            <h2 className="text-4xl md:text-6xl font-black mb-8 relative z-10">Start Your Journey with TamaPOS</h2>
+            <h2 className="text-4xl md:text-6xl font-black mb-8 relative z-10">Mulai Perjalanan Anda dengan Noru POS</h2>
             <p className="text-indigo-100 text-xl mb-10 max-w-xl mx-auto relative z-10 leading-relaxed">
-              Join thousands of business owners who trust TamaPOS to run their operations daily.
+              Bergabunglah dengan ribuan pemilik bisnis yang mempercayakan Noru POS untuk menjalankan operasional harian mereka.
             </p>
             <Link href="/register" className="relative z-10 inline-block">
               <Button size="lg" className="bg-white text-indigo-600 hover:bg-slate-50 font-bold px-12 h-16 text-lg rounded-2xl shadow-2xl transition-all hover:scale-105 active:scale-95">
-                Register Your Store Now
+                Daftarkan Toko Anda Sekarang
               </Button>
             </Link>
           </div>
@@ -189,10 +189,10 @@ export default function LandingPage() {
       <footer className="py-12 border-t border-slate-900">
         <div className="container mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-8 text-slate-500 text-sm">
           <div className="flex items-center gap-2 text-slate-300">
-            <div className="w-6 h-6 bg-slate-800 rounded flex items-center justify-center font-bold text-xs">T</div>
-            <span className="font-bold">TamaPOS</span>
+            <div className="w-6 h-6 bg-slate-800 rounded flex items-center justify-center font-bold text-xs">N</div>
+            <span className="font-bold">Noru POS</span>
           </div>
-          <p>© 2026 TamaPOS SaaS. All rights reserved.</p>
+          <p>© 2026 Noru POS SaaS. All rights reserved.</p>
           <div className="flex gap-6">
             <a href="#" className="hover:text-white transition-colors">Privacy</a>
             <a href="#" className="hover:text-white transition-colors">Terms</a>

@@ -54,7 +54,7 @@ export default async function DynamicReceiptPage({
                 notes: order.notes ?? null,
             }}
             store={{
-                name: (storeName as string) || "KasirPro",
+                name: (storeName as string) || "Noru POS",
                 address: (receiptAddress as string) || "",
                 phone: (storePhone as string) || "",
                 footer: (receiptFooter as string) || "Terima kasih atas kunjungan Anda!",

@@ -107,7 +107,7 @@ export default function InstallPrompt() {
                     {/* Content */}
                     <div className="flex-1 pr-4">
                         <h3 className="text-sm font-semibold text-white">
-                            Install KasirPro
+                            Install Noru POS
                         </h3>
                         {isIOS ? (
                             <p className="mt-0.5 text-xs leading-relaxed text-white/60">

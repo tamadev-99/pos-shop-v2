@@ -3,9 +3,9 @@ import type { MetadataRoute } from 'next'
 export default function manifest(): MetadataRoute.Manifest {
     return {
         id: '/',
-        name: 'KasirPro POS',
-        short_name: 'KasirPro',
-        description: 'Sistem Point of Sale Modern untuk Bisnis Anda',
+        name: 'Noru POS',
+        short_name: 'Noru POS',
+        description: 'Sistem Point of Sale terbaik untuk UMKM',
         start_url: '/',
         display: 'standalone',
         background_color: '#f5f5f7',

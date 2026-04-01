@@ -382,7 +382,7 @@ export default function OnboardingPage() {
         </div>
 
         <p className="text-center text-[11px] text-muted-dim mt-6">
-          &copy; 2026 KasirPro. Semua hak dilindungi.
+          &copy; 2026 Noru POS. Semua hak dilindungi.
         </p>
       </div>
     </div>

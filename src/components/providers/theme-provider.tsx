@@ -21,7 +21,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
-        const stored = localStorage.getItem("kasirpro-theme") as Theme | null;
+        const stored = localStorage.getItem("norupos-theme") as Theme | null;
         const initial = stored || "dark";
         setThemeState(initial);
         setMounted(true);
@@ -32,7 +32,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const root = document.documentElement;
         root.classList.remove("light", "dark");
         root.classList.add(theme);
-        localStorage.setItem("kasirpro-theme", theme);
+        localStorage.setItem("norupos-theme", theme);
     }, [theme, mounted]);
 
     const toggleTheme = () => {

@@ -91,7 +91,7 @@ export default function RegisterPage() {
               <Sparkles size={28} />
             </div>
             <h1 className="text-2xl font-bold tracking-tight font-[family-name:var(--font-display)]">
-              <span className="text-gradient">Daftar KasirPro</span>
+              <span className="text-gradient">Daftar Noru POS</span>
             </h1>
             <p className="text-xs text-muted-foreground mt-1.5 text-center">
               Buat akun Owner dan mulai kelola bisnis Anda
@@ -231,7 +231,7 @@ export default function RegisterPage() {
         </div>
 
         <p className="text-center text-[11px] text-muted-dim mt-6">
-          &copy; 2026 KasirPro. Semua hak dilindungi.
+          &copy; 2026 Noru POS. Semua hak dilindungi.
         </p>
       </div>
     </div>

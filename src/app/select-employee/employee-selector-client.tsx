@@ -333,7 +333,7 @@ export function EmployeeSelectorClient({ profiles, storeName, ownerName }: Props
         </div>
 
         <p className="text-center text-[11px] text-muted-dim mt-4">
-          &copy; 2026 KasirPro. Semua hak dilindungi.
+          &copy; 2026 Noru POS. Semua hak dilindungi.
         </p>
       </div>
     </div>
