@@ -90,29 +90,3 @@ export async function updateSetting(key: string, value: unknown) {
   revalidatePath("/", "layout");
 }
 
-export async function getUsers() {
-  return db.select({
-    id: users.id,
-    name: users.name,
-    email: users.email,
-    role: users.role,
-    createdAt: users.createdAt,
-  }).from(users);
-}
-
-export async function updateUserRole(userId: string, role: "cashier" | "manager" | "owner") {
-  const user = await requireRole("owner");
-  const { storeId, employeeProfileId } = await getStoreContext();
-  await db.update(users).set({ role }).where(eq(users.id, userId));
-
-  createAuditLog({
-    userName: user.name || "Unknown",
-    action: "sistem",
-    detail: `Role pengguna diubah ke ${role}`,
-    metadata: { targetUserId: userId, newRole: role },
-    storeId,
-    employeeProfileId,
-  }).catch(() => {});
-
-  revalidatePath("/pengaturan");
-}

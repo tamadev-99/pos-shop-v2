@@ -42,17 +42,15 @@ interface ShiftData {
   totalNonCashSales: number | null;
   totalTransactions: number | null;
   status: "active" | "closed";
-  notes: string | null;
 }
 
 interface Props {
   initialActiveShifts: ShiftData[];
   initialShiftHistory: ShiftData[];
   totalShifts: number;
-  users: { id: string; name: string }[];
 }
 
-export default function ShiftClient({ initialActiveShifts, initialShiftHistory, totalShifts, users }: Props) {
+export default function ShiftClient({ initialActiveShifts, initialShiftHistory, totalShifts }: Props) {
   const { user, activeEmployeeName, activeEmployeeProfileId } = useAuth();
 
   const [openShiftDialog, setOpenShiftDialog] = useState(false);
@@ -114,7 +112,7 @@ export default function ShiftClient({ initialActiveShifts, initialShiftHistory, 
     return new Date(activeShift.openedAt) < startOfToday;
   })();
 
-  const cashierOptions = users.map(u => ({ label: u.name, value: u.id }));
+
 
   const handleOpenShift = (e: React.FormEvent) => {
     e.preventDefault();
