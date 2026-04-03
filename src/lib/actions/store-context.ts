@@ -58,6 +58,19 @@ export async function getActiveStoreId(): Promise<string | null> {
 }
 
 /**
+ * Get the active store ID, guaranteed to be a string. 
+ * Throws if no store is selected, EVEN for SaaS Admin.
+ * Use this for operations that MUST belong to a store (e.g. creating a product).
+ */
+export async function getRequiredStoreId(): Promise<string> {
+  const storeId = await getActiveStoreId();
+  if (!storeId) {
+    throw new Error("Toko belum dipilih. Silakan pilih toko terlebih dahulu.");
+  }
+  return storeId;
+}
+
+/**
  * Get the active employee profile ID. Returns null if not set.
  */
 export async function getActiveEmployeeProfileId(): Promise<string | null> {
@@ -90,12 +103,33 @@ export async function getStoreContext(): Promise<{
   };
 }
 
+/**
+ * Get both store ID and employee profile ID, guaranteed to have a storeId.
+ * Throws if no store is selected, EVEN for SaaS Admin.
+ */
+export async function getRequiredStoreContext(): Promise<{
+  storeId: string;
+  employeeProfileId: string | null;
+  userId: string;
+  userName: string;
+  userRole: string;
+}> {
+  const ctx = await getStoreContext();
+  if (!ctx.storeId) {
+    throw new Error("Toko belum dipilih. Silakan pilih toko terlebih dahulu.");
+  }
+  return {
+    ...ctx,
+    storeId: ctx.storeId,
+  };
+}
+
 
 /**
  * Get the full details of the active store (name, type, etc).
  */
 export async function getActiveStoreDetails() {
-  const storeId = await getActiveStoreId();
+  const storeId = await getRequiredStoreId();
   const storeRecord = await db.query.stores.findFirst({
     where: eq(stores.id, storeId),
   });

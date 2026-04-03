@@ -4,27 +4,31 @@ import { db } from "@/db";
 import { notifications, productVariants, products } from "@/db/schema";
 import { eq, desc, and, lt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getActiveStoreId } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreId } from "@/lib/actions/store-context";
 
 export async function getNotifications() {
   const storeId = await getActiveStoreId();
+  const conditions = storeId ? [eq(notifications.storeId, storeId)] : [];
+  
   return db
     .select()
     .from(notifications)
-    .where(eq(notifications.storeId, storeId))
+    .where(and(...conditions))
     .orderBy(desc(notifications.createdAt))
     .limit(100);
 }
 
 export async function getUnreadNotificationsForPolling() {
   const storeId = await getActiveStoreId();
+  const conditions = storeId ? [eq(notifications.storeId, storeId)] : [];
+
   return db
     .select()
     .from(notifications)
     .where(
       and(
         eq(notifications.isRead, false),
-        eq(notifications.storeId, storeId)
+        ...conditions
       )
     )
     .orderBy(desc(notifications.createdAt));
@@ -37,10 +41,12 @@ export async function markAsRead(id: string) {
 
 export async function markAllAsRead() {
   const storeId = await getActiveStoreId();
+  const conditions = storeId ? [eq(notifications.storeId, storeId)] : [];
+
   await db
     .update(notifications)
     .set({ isRead: true })
-    .where(and(eq(notifications.storeId, storeId), eq(notifications.isRead, false)));
+    .where(and(...conditions, eq(notifications.isRead, false)));
   revalidatePath("/notifikasi");
 }
 
@@ -66,6 +72,7 @@ export async function createNotification(data: {
 
 export async function checkLowStock() {
   const storeId = await getActiveStoreId();
+  if (!storeId) return []; // Don't check global stock without context
 
   const lowStockVariants = await db
     .select({

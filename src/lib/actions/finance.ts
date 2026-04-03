@@ -5,7 +5,7 @@ import { financialTransactions, orders, orderItems, dailyReconciliations } from 
 import { eq, desc, and, gte, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreId, getRequiredStoreContext } from "@/lib/actions/store-context";
 
 export async function getTransactions(filters?: {
   type?: string;
@@ -13,7 +13,7 @@ export async function getTransactions(filters?: {
   endDate?: string;
 }) {
   const storeId = await getActiveStoreId();
-  const conditions = [eq(financialTransactions.storeId, storeId)];
+  const conditions = storeId ? [eq(financialTransactions.storeId, storeId)] : [];
 
   if (filters?.type) {
     conditions.push(eq(financialTransactions.type, filters.type as "masuk" | "keluar"));
@@ -39,7 +39,7 @@ export async function createTransaction(data: {
   description: string;
   amount: number;
 }) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   await db.insert(financialTransactions).values({
     date: data.date,
@@ -65,9 +65,10 @@ export async function createTransaction(data: {
 
 export async function getDailyReconciliation(date: string) {
   const storeId = await getActiveStoreId();
+  const storeConditions = storeId ? [eq(financialTransactions.storeId, storeId)] : [];
 
   const dayTransactions = await db.query.financialTransactions.findMany({
-      where: and(eq(financialTransactions.date, date), eq(financialTransactions.storeId, storeId)),
+      where: and(eq(financialTransactions.date, date), ...storeConditions),
       with: { employee: true }
     });
 
@@ -91,7 +92,7 @@ export async function getDailyReconciliation(date: string) {
 export async function getReconciliationLog(date: string) {
   const storeId = await getActiveStoreId();
   return db.query.dailyReconciliations.findFirst({
-    where: and(eq(dailyReconciliations.date, date), eq(dailyReconciliations.storeId, storeId)),
+    where: and(eq(dailyReconciliations.date, date), storeId ? eq(dailyReconciliations.storeId, storeId) : undefined),
     with: { employee: true }
   });
 }
@@ -103,7 +104,7 @@ export async function saveDailyReconciliation(data: {
   actualCashInHand: number;
   notes?: string;
 }) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   const difference = data.actualCashInHand - (data.calculatedIncome - data.calculatedExpense);
 
   const existing = await getReconciliationLog(data.date);
@@ -148,6 +149,7 @@ export async function saveDailyReconciliation(data: {
 
 export async function getProfitLossReport(startDate: string, endDate: string) {
   const storeId = await getActiveStoreId();
+  const storeConditions = storeId ? [eq(orders.storeId, storeId)] : [];
 
   const orderList = await db
     .select()
@@ -155,7 +157,7 @@ export async function getProfitLossReport(startDate: string, endDate: string) {
     .where(
       and(
         eq(orders.status, "selesai"),
-        eq(orders.storeId, storeId),
+        ...storeConditions,
         gte(orders.date, new Date(startDate)),
         lte(orders.date, new Date(endDate))
       )
@@ -179,13 +181,14 @@ export async function getProfitLossReport(startDate: string, endDate: string) {
   const netRevenue = grossRevenue - totalDiscounts;
   const grossProfit = netRevenue - totalCOGS;
 
+  const expensesConditions = storeId ? [eq(financialTransactions.storeId, storeId)] : [];
   const expenses = await db
     .select()
     .from(financialTransactions)
     .where(
       and(
         eq(financialTransactions.type, "keluar"),
-        eq(financialTransactions.storeId, storeId),
+        ...expensesConditions,
         gte(financialTransactions.date, startDate),
         lte(financialTransactions.date, endDate)
       )
@@ -208,13 +211,14 @@ export async function getProfitLossReport(startDate: string, endDate: string) {
 
 export async function getCashFlowReport(startDate: string, endDate: string) {
   const storeId = await getActiveStoreId();
+  const storeConditions = storeId ? [eq(financialTransactions.storeId, storeId)] : [];
 
   const txList = await db
     .select()
     .from(financialTransactions)
     .where(
       and(
-        eq(financialTransactions.storeId, storeId),
+        ...storeConditions,
         gte(financialTransactions.date, startDate),
         lte(financialTransactions.date, endDate)
       )

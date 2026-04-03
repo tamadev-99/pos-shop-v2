@@ -12,7 +12,7 @@ import { eq, desc, sql, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/actions/auth-helpers";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreId, getRequiredStoreContext } from "@/lib/actions/store-context";
 
 function generateOpnameCode() {
   const now = new Date();
@@ -23,9 +23,10 @@ function generateOpnameCode() {
 
 export async function getStockOpnames() {
   const storeId = await getActiveStoreId();
+  const storeConditions = storeId ? [eq(stockOpnames.storeId, storeId)] : [];
 
   const opnames = await db.query.stockOpnames.findMany({
-    where: eq(stockOpnames.storeId, storeId),
+    where: and(...storeConditions),
     with: { employee: true, reviewer: true },
     orderBy: [desc(stockOpnames.createdAt)],
     limit: 50,
@@ -60,7 +61,7 @@ export async function getStockOpnameById(id: string) {
   const storeId = await getActiveStoreId();
 
   const opname = await db.query.stockOpnames.findFirst({
-    where: and(eq(stockOpnames.id, id), eq(stockOpnames.storeId, storeId)),
+    where: and(eq(stockOpnames.id, id), storeId ? eq(stockOpnames.storeId, storeId) : undefined),
     with: { employee: true, reviewer: true },
   });
 
@@ -99,7 +100,7 @@ export async function createStockOpname(data: {
   note?: string;
   variantIds: string[];
 }) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   const opnameId = crypto.randomUUID();
   const code = generateOpnameCode();
@@ -193,7 +194,7 @@ export async function updateOpnameItem(
 }
 
 export async function submitForReview(opnameId: string) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   const opname = await db
     .select()
@@ -243,7 +244,7 @@ export async function approveStockOpname(
   reviewNote?: string
 ) {
   await requireRole("manager", "owner");
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   const opname = await db
     .select()
@@ -300,7 +301,7 @@ export async function approveStockOpname(
 
 export async function rejectStockOpname(opnameId: string, reviewNote?: string) {
   await requireRole("manager", "owner");
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   const opname = await db
     .select()
@@ -338,7 +339,7 @@ export async function rejectStockOpname(opnameId: string, reviewNote?: string) {
 
 export async function cancelStockOpname(opnameId: string) {
   await requireRole("manager", "owner");
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   const opname = await db
     .select()

@@ -6,14 +6,16 @@ import { eq, like, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
 import { requireRole } from "@/lib/actions/auth-helpers";
-import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreId, getRequiredStoreContext } from "@/lib/actions/store-context";
 
 export async function getCategories() {
   const storeId = await getActiveStoreId();
+  const conditions = storeId ? [eq(categories.storeId, storeId)] : [];
+  
   return db
     .select()
     .from(categories)
-    .where(eq(categories.storeId, storeId))
+    .where(and(...conditions))
     .orderBy(categories.name);
 }
 
@@ -25,7 +27,7 @@ export async function getProducts(filters?: {
   limit?: number;
 }) {
   const storeId = await getActiveStoreId();
-  const conditions = [eq(products.storeId, storeId)];
+  const conditions = storeId ? [eq(products.storeId, storeId)] : [];
 
   if (filters?.search) {
     conditions.push(like(products.name, `%${filters.search}%`));
@@ -77,7 +79,7 @@ export async function getProducts(filters?: {
 export async function getProductById(id: string) {
   const storeId = await getActiveStoreId();
   return db.query.products.findFirst({
-    where: and(eq(products.id, id), eq(products.storeId, storeId)),
+    where: and(eq(products.id, id), storeId ? eq(products.storeId, storeId) : undefined),
     with: {
       variants: {
         with: { wholesaleTiers: true },
@@ -99,7 +101,7 @@ export async function getProductById(id: string) {
 export async function getVariantByBarcode(barcode: string) {
   const storeId = await getActiveStoreId();
   const variant = await db.query.productVariants.findFirst({
-    where: and(eq(productVariants.barcode, barcode), eq(productVariants.storeId, storeId)),
+    where: and(eq(productVariants.barcode, barcode), storeId ? eq(productVariants.storeId, storeId) : undefined),
     with: {
       product: {
         with: { category: true },
@@ -137,7 +139,7 @@ export async function createProduct(data: {
   }[];
 }) {
   await requireRole("manager", "owner");
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   const productId = crypto.randomUUID();
 
   await db.insert(products).values({
@@ -237,7 +239,7 @@ export async function updateProduct(
   newBundleComponents?: { componentVariantId: string; quantity: number }[]
 ) {
   await requireRole("manager", "owner");
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   await db
     .update(products)
@@ -277,7 +279,7 @@ export async function adjustStock(
   _reason: string
 ) {
   await requireRole("manager", "owner");
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   await db
     .update(productVariants)
@@ -301,7 +303,7 @@ export async function adjustStock(
 
 export async function createCategory(data: { name: string; description?: string }) {
   await requireRole("manager", "owner");
-  const storeId = await getActiveStoreId();
+  const storeId = await getRequiredStoreId();
   const id = crypto.randomUUID();
   const slug = data.name
     .toLowerCase()
@@ -320,7 +322,7 @@ export async function createCategory(data: { name: string; description?: string 
 
 export async function updateCategory(id: string, data: Partial<{ name: string; description: string }>) {
   await requireRole("manager", "owner");
-  const storeId = await getActiveStoreId();
+  const storeId = await getRequiredStoreId();
   const updateData: Record<string, unknown> = { ...data };
   if (data.name) {
     updateData.slug = data.name
@@ -337,7 +339,7 @@ export async function updateCategory(id: string, data: Partial<{ name: string; d
 
 export async function deleteCategory(id: string) {
   await requireRole("manager", "owner");
-  const storeId = await getActiveStoreId();
+  const storeId = await getRequiredStoreId();
   await db
     .delete(categories)
     .where(and(eq(categories.id, id), eq(categories.storeId, storeId)));
@@ -360,7 +362,7 @@ export async function importProducts(
   mode: "skip" | "update"
 ): Promise<{ created: number; updated: number; skipped: number; errors: number }> {
   await requireRole("manager", "owner");
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   let created = 0;
   let updated = 0;
@@ -495,8 +497,10 @@ export async function importProducts(
 
 export async function getAllVariantsFlat() {
   const storeId = await getActiveStoreId();
+  const conditions = storeId ? [eq(productVariants.storeId, storeId)] : [];
+  
   const variants = await db.query.productVariants.findMany({
-    where: eq(productVariants.storeId, storeId),
+    where: and(...conditions),
     with: {
       product: {
         with: { category: true }

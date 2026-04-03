@@ -5,11 +5,11 @@ import { shifts } from "@/db/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getStoreContext, getActiveStoreId } from "@/lib/actions/store-context";
+import { getStoreContext, getActiveStoreId, getRequiredStoreContext, getRequiredStoreId } from "@/lib/actions/store-context";
 import { processRecurringExpenses } from "@/lib/actions/expense-tracker";
 
 export async function openShift(openingBalance: number) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   // Check if there's already an active shift for this store
   const activeShift = await db
@@ -51,7 +51,7 @@ export async function closeShift(
   actualClosing: number,
   notes?: string
 ) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   const shift = await db
     .select()
@@ -90,15 +90,17 @@ export async function closeShift(
 
 export async function getActiveShifts() {
   const storeId = await getActiveStoreId();
+  const conditions = storeId ? [eq(shifts.storeId, storeId)] : [];
+  
   return db.query.shifts.findMany({
-    where: and(eq(shifts.storeId, storeId), eq(shifts.status, "active")),
+    where: and(...conditions, eq(shifts.status, "active")),
     with: { employee: true },
     orderBy: [desc(shifts.openedAt)],
   });
 }
 
 export async function getCurrentShift() {
-  const { storeId, employeeProfileId } = await getStoreContext();
+  const { storeId, employeeProfileId } = await getRequiredStoreContext();
   const activeShift = await db.query.shifts.findFirst({
     where: and(
         eq(shifts.storeId, storeId), 
@@ -140,10 +142,11 @@ export async function checkCashierShift() {
 export async function getShiftHistory(page = 1, pageSize = 20) {
   const storeId = await getActiveStoreId();
   const offset = (page - 1) * pageSize;
+  const conditions = storeId ? [eq(shifts.storeId, storeId)] : [];
 
   const [data, countResult] = await Promise.all([
     db.query.shifts.findMany({
-      where: eq(shifts.storeId, storeId),
+      where: and(...conditions),
       orderBy: [desc(shifts.openedAt)],
       limit: pageSize,
       offset,
@@ -152,7 +155,7 @@ export async function getShiftHistory(page = 1, pageSize = 20) {
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(shifts)
-      .where(eq(shifts.storeId, storeId)),
+      .where(and(...conditions)),
   ]);
 
   return {

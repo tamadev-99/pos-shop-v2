@@ -12,9 +12,12 @@ export async function getAuditLogs(filters?: {
   startDate?: string;
   endDate?: string;
   limit?: number;
+  storeId?: string;
 }) {
-  const storeId = await getActiveStoreId();
-  const conditions = [eq(auditLogs.storeId, storeId)];
+  const activeStoreId = await getActiveStoreId();
+  const targetStoreId = activeStoreId || filters?.storeId;
+  const conditions = targetStoreId ? [eq(auditLogs.storeId, targetStoreId)] : [];
+
 
   if (filters?.action) {
     conditions.push(

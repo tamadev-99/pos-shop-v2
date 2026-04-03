@@ -13,7 +13,7 @@ import { eq, desc, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/actions/auth-helpers";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreContext } from "@/lib/actions/store-context";
 
 function generatePOId() {
   const now = new Date();
@@ -24,7 +24,7 @@ function generatePOId() {
 
 export async function getPurchaseOrders(filters?: { status?: string }) {
   const storeId = await getActiveStoreId();
-  const conditions = [eq(purchaseOrders.storeId, storeId)];
+  const conditions = storeId ? [eq(purchaseOrders.storeId, storeId)] : [];
 
   if (filters?.status) {
     conditions.push(eq(purchaseOrders.status, filters.status as "diproses" | "dikirim" | "diterima" | "dibatalkan"));
@@ -56,7 +56,7 @@ export async function createPurchaseOrder(data: {
   notes?: string;
 }) {
   await requireRole("manager", "owner");
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   const poId = generatePOId();
   const today = new Date().toISOString().split("T")[0];
   const total = data.items.reduce((sum, item) => sum + item.unitCost * item.qty, 0);
@@ -124,7 +124,7 @@ export async function updatePOStatus(
   status: "diproses" | "dikirim" | "diterima" | "dibatalkan",
   note?: string
 ) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   const today = new Date().toISOString().split("T")[0];
 
   await db

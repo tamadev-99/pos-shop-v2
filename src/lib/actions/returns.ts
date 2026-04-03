@@ -6,7 +6,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreId, getRequiredStoreContext } from "@/lib/actions/store-context";
 
 function generateReturnId() {
   const now = new Date();
@@ -17,7 +17,7 @@ function generateReturnId() {
 
 export async function getReturns(filters?: { status?: string }) {
   const storeId = await getActiveStoreId();
-  const conditions = [eq(returns.storeId, storeId)];
+  const conditions = storeId ? [eq(returns.storeId, storeId)] : [];
 
   if (filters?.status) {
     conditions.push(eq(returns.status, filters.status as "diproses" | "disetujui" | "ditolak" | "selesai"));
@@ -43,7 +43,7 @@ export async function createReturn(data: {
     unitPrice: number;
   }[];
 }) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   const id = generateReturnId();
   const today = new Date().toISOString().split("T")[0];
   const refundAmount = data.items.reduce((sum, item) => sum + item.unitPrice * item.qty, 0);
@@ -90,7 +90,7 @@ export async function processReturn(
   id: string,
   decision: "disetujui" | "ditolak",
 ) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   const returnRecord = await db.query.returns.findFirst({
     where: and(eq(returns.id, id), eq(returns.storeId, storeId)),

@@ -5,28 +5,32 @@ import { employeeProfiles } from "@/db/schema/profiles";
 import { eq, and, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getStoreContext, getActiveStoreId } from "@/lib/actions/store-context";
+import { getStoreContext, getActiveStoreId, getRequiredStoreId, getRequiredStoreContext } from "@/lib/actions/store-context";
 import bcrypt from "bcryptjs";
 
 // ── READ ──────────────────────────────────────────────
 
 export async function getEmployeeProfiles() {
   const storeId = await getActiveStoreId();
+  const conditions = storeId ? [eq(employeeProfiles.storeId, storeId)] : [];
+
   return db
     .select()
     .from(employeeProfiles)
-    .where(eq(employeeProfiles.storeId, storeId))
+    .where(and(...conditions))
     .orderBy(desc(employeeProfiles.createdAt));
 }
 
 export async function getActiveEmployeeProfiles() {
   const storeId = await getActiveStoreId();
+  const conditions = storeId ? [eq(employeeProfiles.storeId, storeId)] : [];
+
   return db
     .select()
     .from(employeeProfiles)
     .where(
       and(
-        eq(employeeProfiles.storeId, storeId),
+        ...conditions,
         eq(employeeProfiles.isActive, true)
       )
     )
@@ -38,7 +42,7 @@ export async function getEmployeeProfileById(id: string) {
   return db.query.employeeProfiles.findFirst({
     where: and(
       eq(employeeProfiles.id, id),
-      eq(employeeProfiles.storeId, storeId)
+      storeId ? eq(employeeProfiles.storeId, storeId) : undefined
     ),
   });
 }
@@ -50,7 +54,7 @@ export async function createEmployeeProfile(data: {
   role: string;
   pin: string;
 }) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   if (!data.name || !data.pin || !data.role) {
     return { success: false, error: "Nama, role, dan PIN wajib diisi." };
@@ -92,7 +96,7 @@ export async function updateEmployeeProfile(
   id: string,
   data: { name?: string; role?: string; isActive?: boolean }
 ) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   // Verify ownership
   const existing = await db.query.employeeProfiles.findFirst({
@@ -122,7 +126,7 @@ export async function updateEmployeeProfile(
 // ── RESET PIN ──────────────────────────────────────────
 
 export async function resetEmployeePin(id: string, newPin: string) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   if (newPin.length !== 6 || !/^\d{6}$/.test(newPin)) {
     return { success: false, error: "PIN harus 6 digit angka." };
@@ -155,7 +159,7 @@ export async function resetEmployeePin(id: string, newPin: string) {
 // ── DELETE ──────────────────────────────────────────────
 
 export async function deleteEmployeeProfile(id: string) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   const existing = await db.query.employeeProfiles.findFirst({
     where: and(eq(employeeProfiles.id, id), eq(employeeProfiles.storeId, storeId)),

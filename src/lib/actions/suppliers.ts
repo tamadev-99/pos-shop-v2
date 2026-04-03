@@ -5,11 +5,11 @@ import { suppliers, supplierCategories } from "@/db/schema";
 import { eq, like, and, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreId, getRequiredStoreContext } from "@/lib/actions/store-context";
 
 export async function getSuppliers(filters?: { search?: string; status?: string }) {
   const storeId = await getActiveStoreId();
-  const conditions = [eq(suppliers.storeId, storeId)];
+  const conditions = storeId ? [eq(suppliers.storeId, storeId)] : [];
 
   if (filters?.search) {
     conditions.push(like(suppliers.name, `%${filters.search}%`));
@@ -43,7 +43,7 @@ export async function getSuppliers(filters?: { search?: string; status?: string 
 export async function getSupplierById(id: string) {
   const storeId = await getActiveStoreId();
   const supplier = await db.query.suppliers.findFirst({
-    where: and(eq(suppliers.id, id), eq(suppliers.storeId, storeId)),
+    where: and(eq(suppliers.id, id), storeId ? eq(suppliers.storeId, storeId) : undefined),
   });
 
   if (!supplier) return null;
@@ -67,7 +67,7 @@ export async function createSupplier(data: {
   address?: string;
   categoryIds?: string[];
 }) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   const id = crypto.randomUUID();
   const today = new Date().toISOString().split("T")[0];
 
@@ -115,7 +115,7 @@ export async function updateSupplier(
     status: "aktif" | "nonaktif";
   }>
 ) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   await db
     .update(suppliers)
     .set(data)

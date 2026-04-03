@@ -12,12 +12,14 @@ export async function getDailySalesReport(date: string) {
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
 
+  const storeConditions = storeId ? [eq(orders.storeId, storeId)] : [];
+
   const dayOrders = await db
     .select()
     .from(orders)
     .where(
       and(
-        eq(orders.storeId, storeId),
+        ...storeConditions,
         eq(orders.status, "selesai"),
         gte(orders.date, startOfDay),
         lte(orders.date, endOfDay)
@@ -42,12 +44,14 @@ export async function getMonthlySalesReport(year: number, month: number) {
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
+  const storeConditions = storeId ? [eq(orders.storeId, storeId)] : [];
+
   const monthOrders = await db
     .select()
     .from(orders)
     .where(
       and(
-        eq(orders.storeId, storeId),
+        ...storeConditions,
         eq(orders.status, "selesai"),
         gte(orders.date, startDate),
         lte(orders.date, endDate)
@@ -77,6 +81,8 @@ export async function getMonthlySalesReport(year: number, month: number) {
 
 export async function getBestSellers(limit = 10) {
   const storeId = await getActiveStoreId();
+  const storeConditions = storeId ? [eq(orders.storeId, storeId)] : [];
+
   const result = await db
     .select({
       productName: orderItems.productName,
@@ -85,7 +91,7 @@ export async function getBestSellers(limit = 10) {
     })
     .from(orderItems)
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .where(and(eq(orders.status, "selesai"), eq(orders.storeId, storeId)))
+    .where(and(eq(orders.status, "selesai"), ...storeConditions))
     .groupBy(orderItems.productName)
     .orderBy(desc(sql`SUM(${orderItems.qty})`))
     .limit(limit);
@@ -95,6 +101,8 @@ export async function getBestSellers(limit = 10) {
 
 export async function getInventoryValuation() {
   const storeId = await getActiveStoreId();
+  const storeConditions = storeId ? [eq(productVariants.storeId, storeId)] : [];
+
   const result = await db
     .select({
       totalValue: sql<number>`SUM(${productVariants.stock} * ${productVariants.buyPrice})::int`,
@@ -102,7 +110,7 @@ export async function getInventoryValuation() {
       totalSKUs: sql<number>`COUNT(*)::int`,
     })
     .from(productVariants)
-    .where(and(eq(productVariants.status, "aktif"), eq(productVariants.storeId, storeId)));
+    .where(and(eq(productVariants.status, "aktif"), ...storeConditions));
 
   return result[0] || { totalValue: 0, totalItems: 0, totalSKUs: 0 };
 }
@@ -121,13 +129,17 @@ export async function getDashboardStats() {
 
   const todayStr = today.toISOString().split("T")[0];
 
+  const orderStoreConditions = storeId ? [eq(orders.storeId, storeId)] : [];
+  const customerStoreConditions = storeId ? [eq(customers.storeId, storeId)] : [];
+  const poStoreConditions = storeId ? [eq(purchaseOrders.storeId, storeId)] : [];
+
   const [todayOrders, newCustomersResult, pendingPOsResult] = await Promise.all([
     db
       .select()
       .from(orders)
       .where(
         and(
-          eq(orders.storeId, storeId),
+          ...orderStoreConditions,
           eq(orders.status, "selesai"),
           gte(orders.date, today),
           lte(orders.date, endOfDay)
@@ -136,13 +148,13 @@ export async function getDashboardStats() {
     db
       .select({ count: sql<number>`COUNT(*)::int` })
       .from(customers)
-      .where(and(eq(customers.storeId, storeId), eq(customers.joinDate, todayStr))),
+      .where(and(...customerStoreConditions, eq(customers.joinDate, todayStr))),
     db
       .select({ count: sql<number>`COUNT(*)::int` })
       .from(purchaseOrders)
       .where(
         and(
-          eq(purchaseOrders.storeId, storeId),
+          ...poStoreConditions,
           sql`${purchaseOrders.status} IN ('diproses', 'dikirim')`
         )
       ),
@@ -153,7 +165,7 @@ export async function getDashboardStats() {
     .from(orders)
     .where(
       and(
-        eq(orders.storeId, storeId),
+        ...orderStoreConditions,
         eq(orders.status, "selesai"),
         gte(orders.date, yesterday),
         lte(orders.date, endOfYesterday)
@@ -187,6 +199,8 @@ export async function getDashboardStats() {
     paymentBreakdown[method] = (paymentBreakdown[method] || 0) + order.total;
   }
 
+  const productStoreConditions = storeId ? [eq(productVariants.storeId, storeId)] : [];
+
   const lowStockItems = await db
     .select({
       id: productVariants.id,
@@ -201,7 +215,7 @@ export async function getDashboardStats() {
     .innerJoin(products, eq(productVariants.productId, products.id))
     .where(
       and(
-        eq(productVariants.storeId, storeId),
+        ...productStoreConditions,
         eq(productVariants.status, "aktif"),
         sql`${productVariants.stock} <= ${productVariants.minStock}`
       )
@@ -218,7 +232,7 @@ export async function getDashboardStats() {
     .from(orders)
     .where(
       and(
-        eq(orders.storeId, storeId),
+        ...orderStoreConditions,
         eq(orders.status, "selesai"),
         gte(orders.date, weekAgo),
         lte(orders.date, endOfDay)
@@ -295,7 +309,7 @@ export async function getDashboardStats() {
     .from(orders)
     .where(
       and(
-        eq(orders.storeId, storeId),
+        ...orderStoreConditions,
         eq(orders.status, "selesai"),
         gte(orders.date, sixMonthsAgo)
       )
@@ -326,7 +340,7 @@ export async function getDashboardStats() {
     .innerJoin(categories, eq(products.categoryId, categories.id))
     .where(
       and(
-        eq(orders.storeId, storeId),
+        ...orderStoreConditions,
         eq(orders.status, "selesai"),
         gte(orders.date, weekAgo),
         lte(orders.date, endOfDay)
@@ -372,6 +386,8 @@ export async function getSalesByHourReport() {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   thirtyDaysAgo.setHours(0, 0, 0, 0);
 
+  const storeConditions = storeId ? [eq(orders.storeId, storeId)] : [];
+
   const result = await db
     .select({
       dayOfWeek: sql<number>`EXTRACT(DOW FROM ${orders.date})::int`,
@@ -382,7 +398,7 @@ export async function getSalesByHourReport() {
     .from(orders)
     .where(
       and(
-        eq(orders.storeId, storeId),
+        ...storeConditions,
         eq(orders.status, "selesai"),
         gte(orders.date, thirtyDaysAgo)
       )
@@ -412,6 +428,8 @@ export async function getProductTrends(days: number = 30) {
   startDate.setDate(startDate.getDate() - days);
   startDate.setHours(0, 0, 0, 0);
 
+  const storeConditions = storeId ? [eq(orders.storeId, storeId)] : [];
+
   const topProducts = await db
     .select({
       productName: orderItems.productName,
@@ -421,7 +439,7 @@ export async function getProductTrends(days: number = 30) {
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
     .where(
       and(
-        eq(orders.storeId, storeId),
+        ...storeConditions,
         eq(orders.status, "selesai"),
         gte(orders.date, startDate)
       )
@@ -446,7 +464,7 @@ export async function getProductTrends(days: number = 30) {
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
     .where(
       and(
-        eq(orders.storeId, storeId),
+        ...storeConditions,
         eq(orders.status, "selesai"),
         gte(orders.date, startDate),
         sql`${orderItems.productName} IN (${sql.join(productNames.map(n => sql`${n}`), sql`, `)})`
@@ -480,6 +498,8 @@ export async function getProductTrends(days: number = 30) {
 
 export async function getProfitMarginReport() {
   const storeId = await getActiveStoreId();
+  const storeConditions = storeId ? [eq(orders.storeId, storeId)] : [];
+
   const result = await db
     .select({
       categoryName: categories.name,
@@ -493,7 +513,7 @@ export async function getProfitMarginReport() {
     .innerJoin(productVariants, eq(orderItems.variantId, productVariants.id))
     .innerJoin(products, eq(productVariants.productId, products.id))
     .innerJoin(categories, eq(products.categoryId, categories.id))
-    .where(and(eq(orders.status, "selesai"), eq(orders.storeId, storeId)))
+    .where(and(eq(orders.status, "selesai"), ...storeConditions))
     .groupBy(categories.name)
     .orderBy(desc(sql`SUM(${orderItems.subtotal})`));
 
@@ -526,6 +546,8 @@ export async function getProfitMarginReport() {
 
 export async function getCustomerFrequencyReport() {
   const storeId = await getActiveStoreId();
+  const storeConditions = storeId ? [eq(orders.storeId, storeId)] : [];
+
   const customerOrders = await db
     .select({
       customerId: orders.customerId,
@@ -535,7 +557,7 @@ export async function getCustomerFrequencyReport() {
     .from(orders)
     .where(
       and(
-        eq(orders.storeId, storeId),
+        ...storeConditions,
         eq(orders.status, "selesai"),
         isNotNull(orders.customerId)
       )

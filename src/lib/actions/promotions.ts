@@ -6,11 +6,11 @@ import { eq, and, lte, gte, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/actions/auth-helpers";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreId, getRequiredStoreContext } from "@/lib/actions/store-context";
 
 export async function getPromotions(filters?: { active?: boolean }) {
   const storeId = await getActiveStoreId();
-  const conditions = [eq(promotions.storeId, storeId)];
+  const conditions = storeId ? [eq(promotions.storeId, storeId)] : [];
 
   if (filters?.active !== undefined) {
     conditions.push(eq(promotions.isActive, filters.active));
@@ -26,13 +26,14 @@ export async function getPromotions(filters?: { active?: boolean }) {
 export async function getActivePromotions() {
   const storeId = await getActiveStoreId();
   const today = new Date().toISOString().split("T")[0];
+  const storeConditions = storeId ? [eq(promotions.storeId, storeId)] : [];
 
   return db
     .select()
     .from(promotions)
     .where(
       and(
-        eq(promotions.storeId, storeId),
+        ...storeConditions,
         eq(promotions.isActive, true),
         lte(promotions.startDate, today),
         gte(promotions.endDate, today)
@@ -55,7 +56,7 @@ export async function createPromotion(data: {
   targetIds?: string[];
 }) {
   await requireRole("manager", "owner");
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   const id = crypto.randomUUID();
 
   await db.insert(promotions).values({
@@ -106,7 +107,7 @@ export async function updatePromotion(
   }>
 ) {
   await requireRole("manager", "owner");
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   await db
     .update(promotions)
     .set(data)
@@ -126,7 +127,7 @@ export async function updatePromotion(
 
 export async function deletePromotion(id: string) {
   await requireRole("manager", "owner");
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   await db
     .delete(promotions)
     .where(and(eq(promotions.id, id), eq(promotions.storeId, storeId)));

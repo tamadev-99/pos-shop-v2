@@ -3,17 +3,18 @@
 import { db } from "@/db";
 import { orders } from "@/db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
-import { getActiveStoreId } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
 
 export async function getTaxReport(startDate: string, endDate: string) {
   const storeId = await getActiveStoreId();
-
+  const storeConditions = storeId ? [eq(orders.storeId, storeId)] : [];
+  
   const orderList = await db
     .select()
     .from(orders)
     .where(
       and(
-        eq(orders.storeId, storeId),
+        ...storeConditions,
         eq(orders.status, "selesai"),
         gte(orders.date, new Date(startDate)),
         lte(orders.date, new Date(endDate))

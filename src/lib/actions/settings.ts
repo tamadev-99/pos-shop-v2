@@ -6,18 +6,20 @@ import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/actions/auth-helpers";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreId, getRequiredStoreContext } from "@/lib/actions/store-context";
 
 export async function getSettings() {
   const storeId = await getActiveStoreId();
+  const storeConditions = storeId ? [eq(storeSettings.storeId, storeId)] : [];
+  
   const settingsRecords = await db
     .select()
     .from(storeSettings)
-    .where(eq(storeSettings.storeId, storeId));
+    .where(and(...storeConditions));
 
-  const storeRecord = await db.query.stores.findFirst({
+  const storeRecord = storeId ? await db.query.stores.findFirst({
     where: eq(stores.id, storeId),
-  });
+  }) : null;
 
   const settingsMap: Record<string, unknown> = {};
   for (const s of settingsRecords) {
@@ -37,17 +39,19 @@ export async function getSettings() {
 
 export async function getSetting(key: string) {
   const storeId = await getActiveStoreId();
+  const storeConditions = storeId ? [eq(storeSettings.storeId, storeId)] : [];
+  
   const setting = await db
     .select()
     .from(storeSettings)
-    .where(and(eq(storeSettings.storeId, storeId), eq(storeSettings.key, key)))
+    .where(and(...storeConditions, eq(storeSettings.key, key)))
     .limit(1);
   return setting[0]?.value || null;
 }
 
 export async function updateSetting(key: string, value: unknown) {
   const user = await requireRole("owner");
-  const { storeId, employeeProfileId } = await getStoreContext();
+  const { storeId, employeeProfileId } = await getRequiredStoreContext();
 
   const existing = await db
     .select()

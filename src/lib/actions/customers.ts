@@ -5,11 +5,11 @@ import { customers, storeSettings } from "@/db/schema";
 import { eq, like, and, desc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreId, getRequiredStoreContext } from "@/lib/actions/store-context";
 
 export async function getCustomers(filters?: { search?: string; tier?: string }) {
   const storeId = await getActiveStoreId();
-  const conditions = [eq(customers.storeId, storeId)];
+  const conditions = storeId ? [eq(customers.storeId, storeId)] : [];
 
   if (filters?.search) {
     conditions.push(like(customers.name, `%${filters.search}%`));
@@ -28,7 +28,7 @@ export async function getCustomers(filters?: { search?: string; tier?: string })
 export async function getCustomerById(id: string) {
   const storeId = await getActiveStoreId();
   return db.query.customers.findFirst({
-    where: and(eq(customers.id, id), eq(customers.storeId, storeId)),
+    where: and(eq(customers.id, id), storeId ? eq(customers.storeId, storeId) : undefined),
   });
 }
 
@@ -39,7 +39,7 @@ export async function createCustomer(data: {
   address?: string;
   birthDate?: string;
 }) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   const id = crypto.randomUUID();
   const today = new Date().toISOString().split("T")[0];
 
@@ -77,7 +77,7 @@ export async function updateCustomer(
     birthDate: string;
   }>
 ) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   await db
     .update(customers)
     .set(data)
@@ -96,7 +96,7 @@ export async function updateCustomer(
 }
 
 export async function addLoyaltyPoints(customerId: string, points: number) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   await db
     .update(customers)
@@ -119,7 +119,7 @@ export async function addLoyaltyPoints(customerId: string, points: number) {
 }
 
 export async function redeemPoints(customerId: string, points: number) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   await db
     .update(customers)
@@ -173,7 +173,7 @@ async function getTierThresholds(storeId: string): Promise<{ name: string; minSp
 }
 
 export async function recalculateTier(customerId: string) {
-  const storeId = await getActiveStoreId();
+  const storeId = await getRequiredStoreId();
   const customer = await db
     .select()
     .from(customers)
@@ -198,10 +198,12 @@ export async function recalculateTier(customerId: string) {
 
 export async function getCustomerStats() {
   const storeId = await getActiveStoreId();
+  const conditions = storeId ? [eq(customers.storeId, storeId)] : [];
+  
   const allCustomers = await db
     .select()
     .from(customers)
-    .where(eq(customers.storeId, storeId));
+    .where(and(...conditions));
   const thisMonth = new Date().toISOString().slice(0, 7);
 
   return {

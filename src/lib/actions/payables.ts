@@ -4,12 +4,14 @@ import { db } from "@/db";
 import { purchaseOrders, purchaseOrderTimeline, financialTransactions } from "@/db/schema";
 import { eq, ne, desc, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreContext } from "@/lib/actions/store-context";
 
 export async function getPayables() {
     const storeId = await getActiveStoreId();
+    const conditions = storeId ? [eq(purchaseOrders.storeId, storeId)] : [];
+    
     const list = await db.query.purchaseOrders.findMany({
-        where: and(ne(purchaseOrders.paymentStatus, "lunas"), eq(purchaseOrders.storeId, storeId)),
+        where: and(ne(purchaseOrders.paymentStatus, "lunas"), ...conditions),
         with: {
             supplier: true,
         },
@@ -37,10 +39,10 @@ export async function getPayablesSummary() {
 }
 
 export async function recordPayment(poId: string, amount: number, note?: string) {
-    const { storeId, employeeProfileId } = await getStoreContext();
+    const { storeId, employeeProfileId } = await getRequiredStoreContext();
 
     const po = await db.query.purchaseOrders.findFirst({
-        where: and(eq(purchaseOrders.id, poId), eq(purchaseOrders.storeId, storeId)),
+        where: and(eq(purchaseOrders.id, poId), storeId ? eq(purchaseOrders.storeId, storeId) : undefined),
     });
 
     if (!po) throw new Error("PO tidak ditemukan");

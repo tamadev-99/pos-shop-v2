@@ -15,7 +15,7 @@ import {
 import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getStoreContext, getActiveStoreId } from "@/lib/actions/store-context";
+import { getStoreContext, getRequiredStoreContext, getActiveStoreId, getRequiredStoreId } from "@/lib/actions/store-context";
 import { checkLowStock } from "@/lib/actions/notifications";
 import { recalculateTier } from "@/lib/actions/customers";
 
@@ -53,7 +53,7 @@ function generateOrderId() {
 }
 
 export async function createOrder(data: CreateOrderParams) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
   const orderId = generateOrderId();
   const today = new Date().toISOString().split("T")[0];
 
@@ -233,7 +233,7 @@ export async function getOrders(filters: {
   offset?: number;
 } = {}) {
   const storeId = await getActiveStoreId();
-  const conditions = [eq(orders.storeId, storeId)];
+  const conditions = storeId ? [eq(orders.storeId, storeId)] : [];
 
   if (filters.status) {
     conditions.push(eq(orders.status, filters.status as "pending" | "selesai" | "dibatalkan"));
@@ -270,13 +270,13 @@ export async function getOrders(filters: {
 export async function getOrderById(id: string) {
   const storeId = await getActiveStoreId();
   return db.query.orders.findFirst({
-    where: and(eq(orders.id, id), eq(orders.storeId, storeId)),
+    where: and(eq(orders.id, id), storeId ? eq(orders.storeId, storeId) : undefined),
     with: { items: true, employee: true },
   });
 }
 
 export async function cancelOrder(id: string) {
-  const { storeId, employeeProfileId, userName } = await getStoreContext();
+  const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
   const order = await db.query.orders.findFirst({
     where: and(eq(orders.id, id), eq(orders.storeId, storeId)),
@@ -343,7 +343,7 @@ export async function holdTransaction(data: {
   shippingFee?: number;
   notes?: string;
 }) {
-  const { storeId, employeeProfileId } = await getStoreContext();
+  const { storeId, employeeProfileId } = await getRequiredStoreContext();
   const id = crypto.randomUUID();
 
   await db.insert(heldTransactions).values({
@@ -363,10 +363,12 @@ export async function holdTransaction(data: {
 
 export async function getHeldTransactions() {
   const storeId = await getActiveStoreId();
+  const conditions = storeId ? [eq(heldTransactions.storeId, storeId)] : [];
+  
   return db
     .select()
     .from(heldTransactions)
-    .where(eq(heldTransactions.storeId, storeId))
+    .where(and(...conditions))
     .orderBy(desc(heldTransactions.createdAt));
 }
 
@@ -378,7 +380,7 @@ export async function deleteHeldTransaction(id: string) {
 export async function getOrdersByCustomerId(customerId: string) {
   const storeId = await getActiveStoreId();
   return db.query.orders.findMany({
-    where: and(eq(orders.customerId, customerId), eq(orders.storeId, storeId)),
+    where: and(eq(orders.customerId, customerId), storeId ? eq(orders.storeId, storeId) : undefined),
     with: { items: true },
     orderBy: [desc(orders.createdAt)],
     limit: 20,

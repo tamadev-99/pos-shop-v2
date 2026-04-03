@@ -6,7 +6,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/actions/auth-helpers";
 import { createAuditLog } from "@/lib/actions/audit";
-import { getActiveStoreId, getStoreContext } from "@/lib/actions/store-context";
+import { getActiveStoreId, getStoreContext, getRequiredStoreId, getRequiredStoreContext } from "@/lib/actions/store-context";
 
 const DEFAULT_CATEGORIES = [
     { name: "Penjualan", type: "masuk" as const, isDefault: true },
@@ -19,6 +19,8 @@ const DEFAULT_CATEGORIES = [
 
 export async function getExpenseCategories() {
     const storeId = await getActiveStoreId();
+    if (!storeId) return [];
+
     const cats = await db
         .select()
         .from(expenseCategories)
@@ -44,7 +46,7 @@ export async function createExpenseCategory(data: {
     type: "masuk" | "keluar";
 }) {
     await requireRole("manager", "owner");
-    const { storeId, employeeProfileId, userName } = await getStoreContext();
+    const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
     await db.insert(expenseCategories).values({
         name: data.name,
@@ -67,7 +69,7 @@ export async function createExpenseCategory(data: {
 
 export async function deleteExpenseCategory(id: string) {
     await requireRole("manager", "owner");
-    const { storeId, employeeProfileId, userName } = await getStoreContext();
+    const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
     const cat = await db.select().from(expenseCategories).where(eq(expenseCategories.id, id));
     if (cat[0]?.isDefault) {
@@ -89,6 +91,8 @@ export async function deleteExpenseCategory(id: string) {
 
 export async function getRecurringExpenses() {
     const storeId = await getActiveStoreId();
+    if (!storeId) return [];
+
     return db
         .select()
         .from(recurringExpenses)
@@ -104,7 +108,7 @@ export async function createRecurringExpense(data: {
     nextDueDate: string;
 }) {
     await requireRole("manager", "owner");
-    const { storeId, employeeProfileId, userName } = await getStoreContext();
+    const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
     await db.insert(recurringExpenses).values({
         description: data.description,
@@ -130,7 +134,7 @@ export async function createRecurringExpense(data: {
 
 export async function deleteRecurringExpense(id: string) {
     await requireRole("manager", "owner");
-    const { storeId, employeeProfileId, userName } = await getStoreContext();
+    const { storeId, employeeProfileId, userName } = await getRequiredStoreContext();
 
     await db
         .update(recurringExpenses)
@@ -151,6 +155,7 @@ export async function deleteRecurringExpense(id: string) {
 
 export async function processRecurringExpenses() {
     const storeId = await getActiveStoreId();
+    if (!storeId) return 0;
     const today = new Date().toISOString().split("T")[0];
 
     const dueExpenses = await db
