@@ -7,18 +7,21 @@ import { LowStockWarning } from "@/components/dashboard/low-stock-warning";
 import { HourlySales } from "@/components/dashboard/hourly-sales";
 import { MonthlyTrend } from "@/components/dashboard/monthly-trend";
 import { CategoryPerformance } from "@/components/dashboard/category-performance";
+import { SubscriptionStatus } from "@/components/dashboard/subscription-status";
 import { getDashboardStats, getBestSellers } from "@/lib/actions/reports";
 import { getOrders } from "@/lib/actions/orders";
 import { processRecurringExpenses } from "@/lib/actions/expense-tracker";
+import { getSubscriptionStatus } from "@/lib/actions/subscription";
 
 export default async function DashboardPage() {
   // Process any due recurring expenses on dashboard load
   processRecurringExpenses().catch(() => { });
 
-  const [stats, topProductsData, recentOrdersData] = await Promise.all([
+  const [stats, topProductsData, recentOrdersData, subStatus] = await Promise.all([
     getDashboardStats(),
     getBestSellers(5),
     getOrders({ limit: 5 }),
+    getSubscriptionStatus(),
   ]);
 
   // Format best sellers into the shape expected by TopProducts
@@ -59,6 +62,15 @@ export default async function DashboardPage() {
       </div>
 
 
+
+      {/* Subscription Status */}
+      <div className="animate-fade-up" style={{ animationDelay: "100ms" }}>
+        <SubscriptionStatus 
+          status={subStatus.status} 
+          daysRemaining={subStatus.daysRemaining} 
+          expiryDate={subStatus.subscriptionEndsAt || subStatus.trialEndsAt} 
+        />
+      </div>
 
       {/* Stats — 6 cards in 3-column grid */}
       <StatsCards stats={stats} />

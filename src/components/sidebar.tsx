@@ -17,6 +17,7 @@ import {
   Users,
   TicketPercent,
   BarChart3,
+  CreditCard,
   Clock,
   Bell,
   ClipboardCheck,
@@ -54,8 +55,10 @@ const navItems = [
   { label: "Pengaturan", href: "/pengaturan", icon: Settings, group: "system" },
   
   // Platform Admin
-  { label: "Performa Platform", href: "/admin/platform", icon: BarChart3, group: "platform" },
+  { label: "Performa Platform", href: "/admin", icon: BarChart3, group: "platform" },
   { label: "Data Tenant", href: "/admin/tenants", icon: Users, group: "platform" },
+  { label: "Biaya Langganan", href: "/admin/plans", icon: TicketPercent, group: "platform" },
+  { label: "Log Transaksi", href: "/admin/transactions", icon: CreditCard, group: "platform" },
 ];
 
 const groupLabels: Record<string, string> = {
@@ -260,7 +263,7 @@ export function Sidebar({ customPermissions }: SidebarProps = {}) {
         )}
 
         {/* Switch Employee */}
-        {(!collapsed || mobileOpen) && (
+        {(!collapsed || mobileOpen) && userRole !== "saas-admin" && (
           <button
             onClick={handleSwitchEmployee}
             className="flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-all duration-200 w-full cursor-pointer"
@@ -271,7 +274,7 @@ export function Sidebar({ customPermissions }: SidebarProps = {}) {
         )}
 
         {/* Switch Store */}
-        {(!collapsed || mobileOpen) && (
+        {(!collapsed || mobileOpen) && userRole !== "saas-admin" && (
           <button
             onClick={handleSwitchStore}
             className="flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-all duration-200 w-full cursor-pointer"
@@ -280,6 +283,7 @@ export function Sidebar({ customPermissions }: SidebarProps = {}) {
             <span>Ganti Toko</span>
           </button>
         )}
+
 
         {/* Theme toggle */}
         <button

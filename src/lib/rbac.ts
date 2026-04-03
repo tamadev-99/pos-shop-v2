@@ -2,8 +2,10 @@ export type Role = "cashier" | "manager" | "owner" | "saas-admin";
 
 const rolePermissions: Record<Role, string[]> = {
   "saas-admin": [
-    "/admin/platform",
+    "/admin",
     "/admin/tenants",
+    "/admin/plans",
+    "/admin/transactions",
     "/admin/settings",
   ],
   cashier: [
@@ -14,6 +16,7 @@ const rolePermissions: Record<Role, string[]> = {
     "/shift",
     "/notifikasi",
   ],
+
   manager: [
     "/dashboard",
     "/pos",

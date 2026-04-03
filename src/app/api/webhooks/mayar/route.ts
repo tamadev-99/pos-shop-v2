@@ -1,35 +1,71 @@
 import { db } from "@/db";
-import { tenants } from "@/db/schema";
+import { tenants, subscriptionTransactions, subscriptionPlans } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import crypto from "node:crypto";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+    const body = JSON.parse(rawBody);
     
-    // In a real Mayar integration, you'd verify the signature/secret here.
-    // metadata might contain the tenantId
-    const { status, payload } = body;
-    const tenantId = payload?.metadata?.tenantId;
+    // Webhook Signature Verification
+    const signature = req.headers.get("x-mayar-signature");
+    const webhookSecret = process.env.MAYAR_WEBHOOK_SECRET;
 
-    if (status === "PAID" && tenantId) {
-      // Find the current tenant to see when they expire
+    if (webhookSecret && signature) {
+      const hmac = crypto.createHmac("sha256", webhookSecret);
+      const digest = hmac.update(rawBody).digest("hex");
+      
+      if (digest !== signature) {
+        console.warn("[WEBHOOK] Invalid signature detected");
+        return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+      }
+    }
+
+    const { status, payload, event } = body;
+    
+    // Mayar Invoices usually send 'invoice.paid' or similar events
+    // or status 'PAID' in the generic webhook
+    const isPaid = status === "PAID" || event === "invoice.paid";
+    
+    const tenantId = payload?.metadata?.tenantId;
+    const planId = payload?.metadata?.planId;
+
+    if (isPaid && tenantId) {
+      console.log(`[WEBHOOK] Processing payment for Tenant: ${tenantId}`);
+
       const currentTenant = await db.query.tenants.findFirst({
         where: eq(tenants.id, tenantId),
       });
 
       if (!currentTenant) {
+        console.error(`[WEBHOOK] Tenant ${tenantId} not found in database`);
         return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
       }
 
-      // Calculate new expiry: 
-      // If currently active and not expired, add 30 days to existing expiry.
-      // If already expired, add 30 days from now.
+      // Record transaction
+      try {
+        await db.insert(subscriptionTransactions).values({
+          tenantId,
+          planId: planId || currentTenant.planId || "default-pro", // Fallback if metadata missing
+          amount: payload?.amount?.toString() || "111000",
+          status: "paid",
+          mayarInvoiceId: payload?.id,
+          paymentMethod: payload?.payment_method,
+          paidAt: new Date(),
+        });
+      } catch (err) {
+        console.error("[WEBHOOK] Failed to record transaction:", err);
+        // We continue anyway to ensure the tenant gets their subscription activated
+      }
+
       const now = new Date();
       let newExpiry = new Date();
       
       const currentExpiry = currentTenant.subscriptionEndsAt || currentTenant.trialEndsAt;
       
+      // Extend 30 days
       if (currentExpiry && currentExpiry > now) {
         newExpiry = new Date(currentExpiry.getTime() + 30 * 24 * 60 * 60 * 1000);
       } else {
@@ -40,18 +76,21 @@ export async function POST(req: Request) {
         .set({
           subscriptionStatus: "active",
           subscriptionEndsAt: newExpiry,
+          planId: planId || currentTenant.planId,
           updatedAt: now,
         })
         .where(eq(tenants.id, tenantId));
 
-      console.log(`[SUBSCRIPTION] Tenant ${tenantId} renewed until ${newExpiry.toISOString()}`);
+      console.log(`[SUBSCRIPTION SUCCESS] Tenant ${tenantId} renewed until ${newExpiry.toISOString()}`);
       
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, message: "Subscription updated and transaction recorded" });
     }
 
-    return NextResponse.json({ received: true });
+    return NextResponse.json({ received: true, event: event || "unknown" });
   } catch (error) {
     console.error("[WEBHOOK ERROR]", error);
     return NextResponse.json({ error: "Webhook failed" }, { status: 500 });
   }
 }
+
+

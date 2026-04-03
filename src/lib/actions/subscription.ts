@@ -1,8 +1,10 @@
 "use server";
 
 import { db } from "@/db";
-import { tenants, stores } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { tenants, stores, subscriptionPlans, subscriptionTransactions } from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import { getSessionContext } from "./store-context";
 
 export type SubscriptionStatus = {
@@ -15,13 +17,19 @@ export type SubscriptionStatus = {
   tenantEmail: string | null;
 };
 
-/**
- * Check if the current tenant has a valid subscription or trial.
- */
 export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
-  const { activeStoreId, userRole, userEmail } = await getSessionContext();
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
 
-  // SaaS Admins are never blocked
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+
+  const userRole = (session.user as any).role;
+  const userEmail = session.user.email;
+
+  // SaaS Admins are never blocked and don't need a store
   if (userRole === "saas-admin") {
     return {
       status: "active",
@@ -29,12 +37,16 @@ export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
       trialEndsAt: null,
       subscriptionEndsAt: null,
       daysRemaining: 999,
-      tenantName: "Paltform Admin",
+      tenantName: "Platform Admin",
       tenantEmail: userEmail,
     };
   }
 
+  const activeStoreId = (session.session as any).activeStoreId;
+
   if (!activeStoreId) {
+    // If not a saas-admin and no store selected, 
+    // we should let them through to the selection page
     return {
       status: "active",
       isBlocked: false,
@@ -45,6 +57,7 @@ export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
       tenantEmail: null,
     };
   }
+
 
   // Get tenant info via store
   const store = await db.query.stores.findFirst({
@@ -64,7 +77,7 @@ export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
 
   const tenant = store.tenant;
   const now = new Date();
-  
+
   let status: "trial" | "active" | "expired" = tenant.subscriptionStatus;
   let isBlocked = false;
   let expiryDate = tenant.subscriptionEndsAt || tenant.trialEndsAt;
@@ -90,24 +103,101 @@ export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
 }
 
 /**
- * Create a payment link for subscription renewal using Mayar.
+ * Create a payment invoice for subscription renewal using Mayar.
  */
 export async function createSubscriptionPaymentLink() {
-  const status = await getSubscriptionStatus();
-  if (!status.tenantName || !status.tenantEmail) {
-    throw new Error("Tenant context missing for payment.");
+  const { activeStoreId } = await getSessionContext();
+  if (!activeStoreId) throw new Error("No active store found.");
+
+  // Get current plan (default to the first active one if not set)
+  let plan = await db.query.subscriptionPlans.findFirst({
+    where: eq(subscriptionPlans.isActive, true),
+    orderBy: [subscriptionPlans.price],
+  });
+
+  if (!plan) {
+    // Fallback if no plan exists yet (should be seeded)
+    throw new Error("No subscription plans available. Please contact admin.");
   }
 
-  // In a real scenario, you'd call Mayar API here.
-  // For the sake of this agentic environment, we'll demonstrate using the Mayar tool 
-  // if we were in the middle of a transaction, but since this is a server action,
-  // we'd typically use a fetch/SDK call.
-  
-  // For now, return the plan details so the UI can prompt the user.
-  return {
-    amount: 100000,
-    description: `Perpanjangan Langganan Noru POS - 30 Hari (${status.tenantName})`,
-    email: status.tenantEmail,
-    name: status.tenantName,
-  };
+  // Get tenant info via store
+  const store = await db.query.stores.findFirst({
+    where: eq(stores.id, activeStoreId),
+    with: {
+      tenant: {
+        with: {
+          owner: true,
+        },
+      },
+    },
+  });
+
+  if (!store || !store.tenant) {
+    throw new Error("Tenant context not found.");
+  }
+
+  const tenant = store.tenant;
+  const baseUrl = process.env.MAYAR_API_URL || "https://api.mayar.id/hl/v1/invoice/create";
+  const apiKey = process.env.MAYAR_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("MAYAR_API_KEY is not configured.");
+  }
+
+  const basePrice = parseInt(plan.price);
+  const ppn = Math.floor(basePrice * 0.11);
+  const total = basePrice + ppn;
+
+  try {
+    const response = await fetch(baseUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: tenant.owner.name,
+        email: tenant.owner.email,
+        mobile: "081234567890", // Default placeholder
+        description: `Perpanjangan Langganan Noru POS - 30 Hari (${tenant.name})`,
+        items: [
+          {
+            description: `${plan.name} (30 Hari)`,
+            quantity: 1,
+            rate: basePrice,
+          },
+          {
+            description: "PPN (11%)",
+            quantity: 1,
+            rate: ppn,
+          }
+        ],
+        metadata: {
+          tenantId: tenant.id,
+          planId: plan.id,
+          type: "subscription_renewal"
+        },
+        // Optional: redirect back to dashboard after payment
+        redirectURL: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard`
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error("Mayar API Error:", result);
+      throw new Error(result.message || "Failed to create invoice with Mayar.");
+    }
+
+    return {
+      url: result.url, // URL to Mayar Invoice page
+      amount: total,
+      invoiceId: result.id
+    };
+  } catch (error) {
+    console.error("Mayar Integration Error:", error);
+    throw error;
+  }
 }
+
+

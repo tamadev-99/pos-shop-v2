@@ -46,11 +46,12 @@ export async function getSessionContext() {
 }
 
 /**
- * Get the active store ID. Throws if no store is selected.
+ * Get the active store ID. Throws if no store is selected (except for SaaS Admin).
  */
-export async function getActiveStoreId(): Promise<string> {
+export async function getActiveStoreId(): Promise<string | null> {
   const ctx = await getSessionContext();
   if (!ctx.activeStoreId) {
+    if (ctx.userRole === "saas-admin") return null;
     throw new Error("No active store selected. Please select a store first.");
   }
   return ctx.activeStoreId;
@@ -68,22 +69,27 @@ export async function getActiveEmployeeProfileId(): Promise<string | null> {
  * Get both store ID and employee profile ID for transactional operations.
  */
 export async function getStoreContext(): Promise<{
-  storeId: string;
+  storeId: string | null;
   employeeProfileId: string | null;
   userId: string;
   userName: string;
+  userRole: string;
 }> {
   const ctx = await getSessionContext();
-  if (!ctx.activeStoreId) {
+  
+  if (!ctx.activeStoreId && ctx.userRole !== "saas-admin") {
     throw new Error("No active store selected.");
   }
+
   return {
     storeId: ctx.activeStoreId,
     employeeProfileId: ctx.activeEmployeeProfileId,
     userId: ctx.userId,
     userName: ctx.userName,
+    userRole: ctx.userRole,
   };
 }
+
 
 /**
  * Get the full details of the active store (name, type, etc).
