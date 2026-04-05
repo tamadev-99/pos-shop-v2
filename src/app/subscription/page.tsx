@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreditCard, AlertCircle, CheckCircle2, ShieldCheck, Zap } from "lucide-react";
 import Link from "next/link";
+import { LogoutButton } from "@/components/auth/logout-button";
 
 export default async function SubscriptionPage() {
   const status = await getSubscriptionStatus();
@@ -102,11 +103,9 @@ export default async function SubscriptionPage() {
                   Hubungi Support via WA
                 </Button>
               </Link>
-              <Link href="/api/auth/sign-out" className="w-full">
-                <Button variant="ghost" className="w-full text-xs">
-                  Logout dari Akun
-                </Button>
-              </Link>
+              <LogoutButton variant="ghost" className="w-full text-xs">
+                Logout dari Akun
+              </LogoutButton>
             </CardFooter>
           </Card>
         </div>
